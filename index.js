@@ -3,7 +3,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 const User = require("./models/User");
 const connectDB = require("./config/db");
-const axios = require("axios"); // Убедитесь, что axios установлен
+const axios = require("axios");
 
 // Загрузка локализации
 const locales = {
@@ -138,6 +138,81 @@ connectDB()
       }
     });
 
+    bot.onText(/\/myprofile/, async (msg) => {
+      console.log("Команда /myprofile получена");
+      const chatId = msg.chat.id;
+      const user = await User.findOne({ telegramId: chatId });
+
+      if (user) {
+        let profileText = `${localize(user.language, "profile_preview")}\n\n`;
+        profileText += `**${user.name}**\n`;
+        profileText += `${localize(user.language, "age")}: ${user.age}\n`;
+        profileText += `${localize(user.language, "location")}: ${user.city}\n`;
+        profileText += `${localize(user.language, "about")}: ${
+          user.about || localize(user.language, "not_provided")
+        }`;
+
+        try {
+          if (user.photoUrl) {
+            let photoToSend = user.photoUrl.startsWith("http")
+              ? await getUpdatedPhotoUrl(user.photoUrl)
+              : user.photoUrl;
+            if (!photoToSend) {
+              photoToSend = user.photoUrl;
+            }
+            await bot.sendPhoto(chatId, photoToSend, {
+              caption: profileText,
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: localize(user.language, "yes"),
+                      callback_data: "profile_approved",
+                    },
+                  ],
+                  [
+                    {
+                      text: localize(user.language, "no"),
+                      callback_data: "profile_edit",
+                    },
+                  ],
+                ],
+              },
+            });
+          } else {
+            await bot.sendMessage(chatId, profileText, {
+              parse_mode: "Markdown",
+            });
+          }
+        } catch (error) {
+          console.error("Failed to send photo:", error);
+          await bot.sendMessage(
+            chatId,
+            "Не удалось отправить фотографию. Вот информация о профиле:",
+            { parse_mode: "Markdown" }
+          );
+          await bot.sendMessage(chatId, profileText, {
+            parse_mode: "Markdown",
+          });
+        }
+      } else {
+        // Если пользователь не найден, предложите начать с создания анкеты
+        bot.sendMessage(chatId, localize("pl", "profile_not_found"), {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: localize("pl", "create_profile"),
+                  callback_data: "start_profile_creation",
+                },
+              ],
+            ],
+          },
+        });
+      }
+    });
+
     bot.on("callback_query", async (query) => {
       const chatId = query.message.chat.id;
       let user = await User.findOne({ telegramId: chatId });
@@ -208,7 +283,13 @@ connectDB()
           },
         });
       } else if (query.data.startsWith("interested_")) {
-        user.interestedIn = query.data.split("_")[1];
+        const interest = query.data.split("_")[1];
+        user.interestedIn = [interest]; // Начинаем с массива с одним элементом
+
+        if (query.data === "interested_both") {
+          user.interestedIn = ["male", "female"];
+        }
+
         await user.save();
         bot.sendMessage(chatId, localize(user.language, "location_question"), {
           reply_markup: {
@@ -227,7 +308,6 @@ connectDB()
       } else if (query.data === "profile_approved") {
         bot.sendMessage(chatId, "Переход к просмотру анкет...");
       } else if (query.data === "profile_edit") {
-        // Начнем процесс редактирования профиля с вопроса о возрасте
         bot.sendMessage(chatId, localize(user.language, "age_question"));
         // Сбросим все данные профиля, кроме telegramId и language
         user.age = undefined;
@@ -239,6 +319,17 @@ connectDB()
         user.about = undefined;
         user.photoUrl = undefined;
         await user.save();
+      } else if (query.data === "start_profile_creation") {
+        bot.sendMessage(chatId, localize("pl", "language_selection"), {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "Polski", callback_data: "pl" }],
+              [{ text: "Русский", callback_data: "ru" }],
+              [{ text: "Українська", callback_data: "ua" }],
+              [{ text: "English", callback_data: "en" }],
+            ],
+          },
+        });
       }
       bot.answerCallbackQuery(query.id);
     });

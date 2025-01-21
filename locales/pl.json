@@ -21,5 +21,7 @@
   "age": "Wiek",
   "location": "Lokalizacja",
   "about": "O sobie",
-  "not_provided": "Nie podano"
+  "not_provided": "Nie podano",
+  "profile_not_found": "Nie znaleziono twojego profilu. Chcesz go utworzyć?",
+  "create_profile": "Utwórz profil"
 }

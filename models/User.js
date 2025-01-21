@@ -12,10 +12,12 @@ const UserSchema = new Schema({
     type: String,
     enum: ["male", "female"],
   },
-  interestedIn: {
-    type: String,
-    enum: ["male", "female", "both"],
-  },
+  interestedIn: [
+    {
+      type: String,
+      enum: ["male", "female"],
+    },
+  ],
   city: { type: String },
   location: {
     type: { type: String, default: "Point" },
