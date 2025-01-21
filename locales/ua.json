@@ -1,0 +1,21 @@
+{
+  "welcome": "Witaj! Aplikacja do znajdowania par i przyjaciół.",
+  "privacy_policy": "Twoje dane są bezpieczne, nie dzielimy się nimi z nikim. Informacje są przechowywane na naszych serwerach.",
+  "agree": "OK",
+  "age_question": "Ile masz lat?",
+  "gender_question": "Jesteś:",
+  "female": "Dziewczyną",
+  "male": "Chłopakiem",
+  "looking_for": "Szukasz:",
+  "both": "Wszystkich",
+  "location_question": "Skąd jesteś?",
+  "name_question": "Jak masz na imię?",
+  "about_question": "Napisz coś o sobie:",
+  "photo_request": "Prześlij swoje zdjęcie.",
+  "profile_preview": "Twoja ankieta wygląda tak:",
+  "yes": "Tak",
+  "no": "Nie",
+  "age_too_young": "Przepraszam, ale twój wiek jest za młody. Lepiej idź pograj w Barbie.",
+  "language_selection": "Wybierz język interfejsu:",
+  "share_location": "Udostępnij lokalizację"
+}
