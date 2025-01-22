@@ -7,7 +7,7 @@ const UserSchema = new Schema({
     type: String,
     enum: ["pl", "ru", "ua", "en"],
   },
-  age: { type: Number, min: 18, max: 100 },
+  age: { type: Number, min: 17, max: 100 },
   gender: {
     type: String,
     enum: ["male", "female"],

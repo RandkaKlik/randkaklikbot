@@ -80,16 +80,72 @@ connectDB()
         try {
           if (user.photoUrl) {
             let photoToSend = user.photoUrl;
-            if (!user.photoUrl.startsWith("http")) {
-              const updatedUrl = await getUpdatedPhotoUrl(user.photoUrl);
-              if (updatedUrl) {
-                photoToSend = updatedUrl;
-              } else {
-                photoToSend = user.photoUrl;
+            try {
+              await bot.sendPhoto(chatId, photoToSend, {
+                caption: profileText,
+                parse_mode: "Markdown",
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: localize(user.language, "yes"),
+                        callback_data: "profile_approved",
+                      },
+                    ],
+                    [
+                      {
+                        text: localize(user.language, "no"),
+                        callback_data: "profile_edit",
+                      },
+                    ],
+                  ],
+                },
+              });
+            } catch (error) {
+              console.error("Failed to send photo using file_id:", error);
+              // Попробуем получить новый URL
+              try {
+                const updatedUrl = await getUpdatedPhotoUrl(photoToSend);
+                if (updatedUrl) {
+                  await bot.sendPhoto(chatId, updatedUrl, {
+                    caption: profileText,
+                    parse_mode: "Markdown",
+                    reply_markup: {
+                      inline_keyboard: [
+                        [
+                          {
+                            text: localize(user.language, "yes"),
+                            callback_data: "profile_approved",
+                          },
+                        ],
+                        [
+                          {
+                            text: localize(user.language, "no"),
+                            callback_data: "profile_edit",
+                          },
+                        ],
+                      ],
+                    },
+                  });
+                } else {
+                  throw new Error("Failed to update photo URL");
+                }
+              } catch (urlUpdateError) {
+                console.error("Failed to update photo URL:", urlUpdateError);
+                // Отправляем только текст, если и с URL не получилось
+                await bot.sendMessage(
+                  chatId,
+                  "Не удалось отправить фотографию. Вот информация о профиле:",
+                  { parse_mode: "Markdown" }
+                );
+                await bot.sendMessage(chatId, profileText, {
+                  parse_mode: "Markdown",
+                });
               }
             }
-            await bot.sendPhoto(chatId, photoToSend, {
-              caption: profileText,
+          } else {
+            // Если нет фото, отправляем только текст
+            await bot.sendMessage(chatId, profileText, {
               parse_mode: "Markdown",
               reply_markup: {
                 inline_keyboard: [
@@ -108,13 +164,10 @@ connectDB()
                 ],
               },
             });
-          } else {
-            await bot.sendMessage(chatId, profileText, {
-              parse_mode: "Markdown",
-            });
           }
         } catch (error) {
           console.error("Failed to send photo:", error);
+          // В случае ошибки, отправляем только текст профиля
           await bot.sendMessage(
             chatId,
             "Не удалось отправить фотографию. Вот информация о профиле:",
@@ -155,31 +208,71 @@ connectDB()
         try {
           if (user.photoUrl) {
             let photoToSend = user.photoUrl.startsWith("http")
-              ? await getUpdatedPhotoUrl(user.photoUrl)
-              : user.photoUrl;
-            if (!photoToSend) {
-              photoToSend = user.photoUrl;
+              ? user.photoUrl
+              : user.photoUrl; // Используем file_id напрямую, если это не URL
+            try {
+              await bot.sendPhoto(chatId, photoToSend, {
+                caption: profileText,
+                parse_mode: "Markdown",
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: localize(user.language, "yes"),
+                        callback_data: "profile_approved",
+                      },
+                    ],
+                    [
+                      {
+                        text: localize(user.language, "no"),
+                        callback_data: "profile_edit",
+                      },
+                    ],
+                  ],
+                },
+              });
+            } catch (error) {
+              console.error("Failed to send photo using file_id:", error);
+              // Попробуем обновить URL
+              try {
+                const updatedUrl = await getUpdatedPhotoUrl(user.photoUrl);
+                if (updatedUrl) {
+                  await bot.sendPhoto(chatId, updatedUrl, {
+                    caption: profileText,
+                    parse_mode: "Markdown",
+                    reply_markup: {
+                      inline_keyboard: [
+                        [
+                          {
+                            text: localize(user.language, "yes"),
+                            callback_data: "profile_approved",
+                          },
+                        ],
+                        [
+                          {
+                            text: localize(user.language, "no"),
+                            callback_data: "profile_edit",
+                          },
+                        ],
+                      ],
+                    },
+                  });
+                } else {
+                  throw new Error("Failed to update photo URL");
+                }
+              } catch (urlUpdateError) {
+                console.error("Failed to update photo URL:", urlUpdateError);
+                // Отправляем только текст, если и с URL не получилось
+                await bot.sendMessage(
+                  chatId,
+                  "Не удалось отправить фотографию. Вот информация о профиле:",
+                  { parse_mode: "Markdown" }
+                );
+                await bot.sendMessage(chatId, profileText, {
+                  parse_mode: "Markdown",
+                });
+              }
             }
-            await bot.sendPhoto(chatId, photoToSend, {
-              caption: profileText,
-              parse_mode: "Markdown",
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: localize(user.language, "yes"),
-                      callback_data: "profile_approved",
-                    },
-                  ],
-                  [
-                    {
-                      text: localize(user.language, "no"),
-                      callback_data: "profile_edit",
-                    },
-                  ],
-                ],
-              },
-            });
           } else {
             await bot.sendMessage(chatId, profileText, {
               parse_mode: "Markdown",
