@@ -22,11 +22,114 @@ function localize(language, key) {
 async function getUpdatedPhotoUrl(fileId) {
   try {
     const fileInfo = await bot.getFile(fileId);
-    return `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${fileInfo.file_path}`;
+    const photoUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${fileInfo.file_path}`;
+    console.log("Updated photo URL:", photoUrl); // Добавлено логирование для отладки
+    return photoUrl;
   } catch (error) {
     console.error("Error updating photo URL:", error);
     return null;
   }
+}
+
+async function showProfileForMatching(chatId, user, match, bot) {
+  let profileText = ``; // Удалено упоминание "profile_preview"
+  profileText += `**${match.name}**\n`;
+  profileText += `${localize(user.language, "age")}: ${match.age}\n`;
+  profileText += `${localize(user.language, "location")}: ${match.city}\n`;
+  profileText += `${localize(user.language, "about")}: ${
+    match.about || localize(user.language, "not_provided")
+  }`;
+
+  try {
+    if (match.photoUrl) {
+      let photoToSend = match.photoUrl;
+      if (!match.photoUrl.startsWith("http")) {
+        // Используем file_id напрямую
+        photoToSend = match.photoUrl;
+      } else {
+        // Если это URL, пробуем обновить
+        const updatedUrl = await getUpdatedPhotoUrl(match.photoUrl);
+        photoToSend = updatedUrl || match.photoUrl; // Используем file_id, если обновление URL не удалось
+      }
+      console.log("Attempting to send photo:", photoToSend);
+      await bot.sendPhoto(chatId, photoToSend, {
+        caption: profileText,
+        parse_mode: "Markdown",
+      });
+    } else {
+      await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
+    }
+
+    // Отправляем клавиатуру после фото или текста
+    await bot.sendMessage(chatId, "Выберите действие:", {
+      reply_markup: {
+        keyboard: [
+          [{ text: "Лайк" }, { text: "Дизлайк" }],
+          [{ text: "Написать" }, { text: "Стоп" }],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to send photo:", error);
+    await bot.sendMessage(
+      chatId,
+      "Не удалось отправить фотографию. Вот информация о другом профиле:",
+      { parse_mode: "Markdown" }
+    );
+    await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
+    // Отправляем клавиатуру даже если фото не удалось отправить
+    await bot.sendMessage(chatId, "Выберите действие:", {
+      reply_markup: {
+        keyboard: [
+          [{ text: "Лайк" }, { text: "Дизлайк" }],
+          [{ text: "Написать" }, { text: "Стоп" }],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false,
+      },
+    });
+  }
+}
+
+async function findMatches(user) {
+  console.log("User location:", user.location);
+  console.log("User interestedIn:", user.interestedIn);
+  console.log("User gender:", user.gender);
+
+  const maxDistance = 100 * 1000;
+  const query = {
+    location: {
+      $near: {
+        $geometry: {
+          type: "Point",
+          coordinates: user.location.coordinates || [0, 0], // Проверка на наличие координат
+        },
+        $maxDistance: maxDistance,
+      },
+    },
+    gender: { $in: user.interestedIn },
+    interestedIn: user.gender,
+    _id: { $nin: [...user.likesGiven, ...user.dislikesGiven, user._id] },
+  };
+
+  console.log("Match query:", query); // Логирование запроса для отладки
+
+  const matches = await User.find(query).limit(10);
+  console.log(`Found matches count: ${matches.length}`);
+  return matches;
+}
+
+async function createCustomKeyboard() {
+  return {
+    keyboard: [
+      [{ text: "Лайк" }, { text: "Дизлайк" }],
+      [{ text: "Написать" }, { text: "Стоп" }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  };
 }
 
 // Функция для обратного геокодирования
@@ -399,7 +502,22 @@ connectDB()
           },
         });
       } else if (query.data === "profile_approved") {
-        bot.sendMessage(chatId, "Переход к просмотру анкет...");
+        // Показать кастомную клавиатуру
+        await bot.sendMessage(chatId, "Переход к просмотру анкет...", {
+          reply_markup: createCustomKeyboard(),
+        });
+
+        const matches = await findMatches(user);
+        console.log(`Matches count: ${matches.length}`); // Логирование количества найденных анкет
+        if (matches.length > 0) {
+          await showProfileForMatching(chatId, user, matches[0], bot);
+        } else {
+          await bot.sendMessage(
+            chatId,
+            "Пока что анкеты закончились. Попробуйте зайти позже."
+          );
+          // Здесь можно добавить логику для расширения радиуса поиска или уведомления о новых анкетах
+        }
       } else if (query.data === "profile_edit") {
         bot.sendMessage(chatId, localize(user.language, "age_question"));
         // Сбросим все данные профиля, кроме telegramId и language
@@ -521,6 +639,77 @@ connectDB()
         };
         await user.save();
         bot.sendMessage(chatId, localize(user.language, "name_question"));
+      }
+      if (msg.text === "Лайк") {
+        if (!user.likesGiven) user.likesGiven = [];
+        if (
+          !user.premium &&
+          user.likesGiven.length >= (user.lastLikeBoost ? 15 : 10)
+        ) {
+          await bot.sendMessage(
+            chatId,
+            "Вы достигли лимита лайков. Хотите получить еще 5 лайков?",
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: "Перейти на Instagram", url: "YOUR_INSTAGRAM_URL" }],
+                ],
+              },
+            }
+          );
+          return;
+        }
+
+        const matches = await findMatches(user);
+        if (matches.length > 0) {
+          const currentMatch = matches[0]; // Предполагаем, что показываем первую анкету из списка
+          user.likesGiven.push(currentMatch._id.toString());
+          user.lastLikeBoost = user.lastLikeBoost || null; // Убедимся, что поле существует
+          await user.save();
+          await bot.sendMessage(chatId, "Пользователь лайкнут", {
+            reply_markup: createCustomKeyboard(),
+          });
+          // Показать следующую анкету, если она есть
+          matches.shift(); // Удаляем текущую анкету из списка
+          if (matches.length > 0) {
+            await showProfileForMatching(chatId, user, matches[0], bot);
+          } else {
+            await bot.sendMessage(
+              chatId,
+              "Больше анкет нет. Попробуйте зайти позже."
+            );
+          }
+        }
+      } else if (msg.text === "Дизлайк") {
+        // Похожий подход для дизлайка
+        if (!user.dislikesGiven) user.dislikesGiven = [];
+        const matches = await findMatches(user);
+        if (matches.length > 0) {
+          const currentMatch = matches[0];
+          user.dislikesGiven.push(currentMatch._id.toString());
+          await user.save();
+          // Показать следующую анкету, если она есть
+          matches.shift();
+          if (matches.length > 0) {
+            await showProfileForMatching(chatId, user, matches[0], bot);
+          } else {
+            await bot.sendMessage(
+              chatId,
+              "Больше анкет нет. Попробуйте зайти позже."
+            );
+          }
+        }
+      } else if (msg.text === "Стоп") {
+        await bot.sendMessage(chatId, "Остановка просмотра анкет.", {
+          reply_markup: { remove_keyboard: true },
+        });
+        await myProfileCommand(msg, bot); // Используем существующую функцию для показа профиля пользователя
+      } else if (msg.text === "Написать") {
+        // Пока просто кнопка без функционала
+        await bot.sendMessage(
+          chatId,
+          "Функционал 'Написать' будет добавлен позже."
+        );
       }
     });
   })

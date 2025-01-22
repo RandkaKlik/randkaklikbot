@@ -27,12 +27,13 @@ const UserSchema = new Schema({
   about: { type: String },
   photoUrl: { type: String },
   premium: { type: Boolean, default: false },
-  likesGiven: [{ type: Number }],
-  dislikesGiven: [{ type: Number }],
-  likesReceived: [{ type: Number }],
+  likesGiven: [{ type: String }],
+  dislikesGiven: [{ type: String }],
+  likesReceived: [{ type: String }],
   registrationDate: { type: Date, default: Date.now },
   subscriptionStatus: { type: String, default: "free" },
   views: { type: Number, default: 0 },
+  lastLikeBoost: { type: Date },
 });
 
 UserSchema.index({ location: "2dsphere" });
