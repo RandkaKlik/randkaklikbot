@@ -35,9 +35,15 @@ const UserSchema = new Schema({
   views: { type: Number, default: 0 },
   lastLikeBoost: { type: Date },
   lastLikeDate: { type: Date },
+  lastMessageDate: { type: Date },
   dailyLikesGiven: { type: Number, default: 0 },
   additionalLikesUsed: { type: Boolean, default: false },
+  currentChatPartner: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   matches: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  availableChatPartners: [
+    { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  ],
+  endedChats: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 });
 
 UserSchema.index({ location: "2dsphere" });

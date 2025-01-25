@@ -46,6 +46,7 @@ async function showProfileForMatching(chatId, user, match, bot) {
       { parse_mode: "Markdown" }
     );
     await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
+
     await bot.sendMessage(chatId, "Выберите действие:", {
       reply_markup: {
         keyboard: [
@@ -76,12 +77,17 @@ async function findMatches(user) {
     },
     gender: { $in: user.interestedIn },
     interestedIn: user.gender,
-    _id: { $nin: [...user.likesGiven, ...user.dislikesGiven, user._id] },
+    _id: {
+      $ne: user._id,
+      $nin: [...user.likesGiven, ...user.dislikesGiven],
+    },
   };
 
   console.log("Match query:", query);
 
-  const matches = await User.find(query).limit(10);
+  const matches = await User.find(query)
+    .sort({ registrationDate: -1 })
+    .limit(10);
   console.log(`Found matches count: ${matches.length}`);
   return matches;
 }

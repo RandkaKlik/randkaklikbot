@@ -50,9 +50,34 @@ const resetDailyLikes = async (userId) => {
   }
 };
 
+async function checkForNewMatch(userId, likedUserId) {
+  try {
+    const user = await User.findById(userId);
+    const likedUser = await User.findById(likedUserId);
+    if (
+      user.likesGiven.includes(likedUserId.toString()) &&
+      likedUser.likesGiven.includes(userId.toString())
+    ) {
+      // Добавляем друг друга в массив matches
+      await User.findByIdAndUpdate(userId, {
+        $addToSet: { matches: likedUserId },
+      });
+      await User.findByIdAndUpdate(likedUserId, {
+        $addToSet: { matches: userId },
+      });
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error("Error checking for new match:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   createUser,
   getUserByTelegramId,
   addLike,
   resetDailyLikes,
+  checkForNewMatch,
 };

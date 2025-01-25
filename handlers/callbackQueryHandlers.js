@@ -1,13 +1,25 @@
 const User = require("../models/User");
 const { localize } = require("../utils/localization");
 const { showProfileForMatching, findMatches } = require("../utils/profileUtil");
-const { resetDailyLikes } = require("../services/userService");
+const commandHandlers = require("./commandHandlers");
 
 async function handleCallbackQuery(query, bot) {
   const chatId = query.message.chat.id;
   let user = await User.findOne({ telegramId: chatId });
 
   switch (query.data) {
+    case "return_to_profile":
+      await commandHandlers.handleMyProfile({ chat: { id: chatId } }, bot);
+      break;
+    case "delete_profile":
+      await handleDeleteProfileConfirmation(chatId, bot);
+      break;
+    case "confirm_delete":
+      await handleProfileDeletion(chatId, user, bot);
+      break;
+    case "cancel_delete":
+      await commandHandlers.handleMyProfile({ chat: { id: chatId } }, bot);
+      break;
     case "activate_additional_likes":
       await handleActivateAdditionalLikes(user, chatId, query, bot);
       break;
@@ -17,11 +29,58 @@ async function handleCallbackQuery(query, bot) {
     case "profile_edit":
       await handleProfileEdit(user, chatId, bot);
       break;
-    // Добавьте здесь обработчики для других callback_data
+    case "stop_chat":
+      await handleStopChat(chatId, user, bot);
+      break;
     default:
-      await handleDefaultCallback(user, chatId, query, bot);
+      if (query.data.startsWith("start_chat_")) {
+        await handleStartChat(user, query.data.split("_")[2], bot);
+      } else {
+        await handleDefaultCallback(user, chatId, query, bot);
+      }
   }
   bot.answerCallbackQuery(query.id);
+}
+
+async function handleDeleteProfileConfirmation(chatId, bot) {
+  await bot.sendMessage(chatId, "Вы уверены, что хотите удалить профиль?", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "ДА", callback_data: "confirm_delete" }],
+        [{ text: "НЕТ", callback_data: "cancel_delete" }],
+      ],
+    },
+  });
+}
+
+async function handleProfileDeletion(chatId, user, bot) {
+  try {
+    // Удаление всех упоминаний пользователя
+    await User.updateMany(
+      {},
+      {
+        $pull: {
+          likesReceived: user._id,
+          matches: user._id,
+          endedChats: user._id,
+        },
+      }
+    );
+
+    // Удаление самого пользователя
+    await User.findByIdAndDelete(user._id);
+
+    await bot.sendMessage(
+      chatId,
+      "Жаль, что вы решили нас покинуть. Если решите вернуться, нажмите /start"
+    );
+  } catch (error) {
+    console.error("Error deleting profile:", error);
+    await bot.sendMessage(
+      chatId,
+      "Ошибка при удалении профиля. Попробуйте еще раз."
+    );
+  }
 }
 
 async function handleActivateAdditionalLikes(user, chatId, query, bot) {
@@ -86,6 +145,39 @@ async function handleProfileEdit(user, chatId, bot) {
   user.about = undefined;
   user.photoUrl = undefined;
   await user.save();
+}
+
+async function handleStartChat(user, matchId, bot) {
+  const match = await User.findById(matchId);
+
+  if (
+    !user.endedChats.includes(matchId) &&
+    match &&
+    user.availableChatPartners.includes(matchId)
+  ) {
+    await User.findByIdAndUpdate(user._id, {
+      $pull: { availableChatPartners: matchId },
+      currentChatPartner: match._id,
+    });
+    await User.findByIdAndUpdate(match._id, {
+      $pull: { availableChatPartners: user._id },
+      currentChatPartner: user._id,
+    });
+
+    await bot.sendMessage(
+      user.telegramId,
+      `Вы начали переписку с ${match.name}.`
+    );
+    await bot.sendMessage(
+      match.telegramId,
+      `Вы начали переписку с ${user.name}.`
+    );
+  } else {
+    await bot.sendMessage(
+      user.telegramId,
+      "Нельзя начать переписку с этим пользователем. Возможно, переписка была ранее прервана или матч недоступен."
+    );
+  }
 }
 
 async function handleDefaultCallback(user, chatId, query, bot) {
@@ -188,6 +280,59 @@ async function handleDefaultCallback(user, chatId, query, bot) {
         ],
       },
     });
+  }
+}
+
+async function handleStopChat(chatId, user, bot) {
+  if (user.currentChatPartner) {
+    const chatPartner = await User.findById(user.currentChatPartner);
+    if (chatPartner) {
+      // Уведомляем обоих пользователей о прерывании переписки
+      await bot.sendMessage(user.telegramId, "Вы прервали переписку.");
+      await bot.sendMessage(
+        chatPartner.telegramId,
+        "Ваша переписка была прервана."
+      );
+
+      // Убираем текущего партнера по чату и добавляем в endedChats для обоих пользователей
+      await User.findByIdAndUpdate(user._id, {
+        $unset: { currentChatPartner: 1 },
+        $addToSet: { endedChats: chatPartner._id },
+      });
+      await User.findByIdAndUpdate(chatPartner._id, {
+        $unset: { currentChatPartner: 1 },
+        $addToSet: { endedChats: user._id },
+      });
+
+      // Удаляем друг друга из availableChatPartners
+      await User.findByIdAndUpdate(user._id, {
+        $pull: { availableChatPartners: chatPartner._id },
+      });
+      await User.findByIdAndUpdate(chatPartner._id, {
+        $pull: { availableChatPartners: user._id },
+      });
+
+      // Удаляем друг друга из списка матчей, чтобы предотвратить повторное начало переписки
+      await User.findByIdAndUpdate(user._id, {
+        $pull: { matches: chatPartner._id },
+      });
+      await User.findByIdAndUpdate(chatPartner._id, {
+        $pull: { matches: user._id },
+      });
+    } else {
+      await bot.sendMessage(
+        chatId,
+        "Ошибка: Партнер по чату не найден. Переписка уже прервана."
+      );
+      await User.findByIdAndUpdate(user._id, {
+        $unset: { currentChatPartner: 1 },
+      });
+    }
+  } else {
+    await bot.sendMessage(
+      chatId,
+      "У вас нет текущей переписки для прерывания."
+    );
   }
 }
 
