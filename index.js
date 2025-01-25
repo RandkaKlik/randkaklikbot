@@ -4,6 +4,11 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 const User = require("./models/User");
 const connectDB = require("./config/db");
 const axios = require("axios");
+const {
+  addLike,
+  resetDailyLikes,
+  checkForNewMatch,
+} = require("./services/userService");
 
 // Загрузка локализации
 const locales = {
@@ -13,7 +18,10 @@ const locales = {
   en: require("./locales/en.json"),
 };
 
-// Функция для получения перевода на нужный язык
+const dailyLikeLimit = 10;
+const premiumDailyLikeLimit = 25;
+const additionalLikes = 5;
+
 function localize(language, key) {
   return locales[language][key] || locales["pl"][key] || key;
 }
@@ -23,7 +31,7 @@ async function getUpdatedPhotoUrl(fileId) {
   try {
     const fileInfo = await bot.getFile(fileId);
     const photoUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${fileInfo.file_path}`;
-    console.log("Updated photo URL:", photoUrl); // Добавлено логирование для отладки
+    console.log("Updated photo URL:", photoUrl);
     return photoUrl;
   } catch (error) {
     console.error("Error updating photo URL:", error);
@@ -32,7 +40,7 @@ async function getUpdatedPhotoUrl(fileId) {
 }
 
 async function showProfileForMatching(chatId, user, match, bot) {
-  let profileText = ``; // Удалено упоминание "profile_preview"
+  let profileText = ``;
   profileText += `**${match.name}**\n`;
   profileText += `${localize(user.language, "age")}: ${match.age}\n`;
   profileText += `${localize(user.language, "location")}: ${match.city}\n`;
@@ -44,12 +52,10 @@ async function showProfileForMatching(chatId, user, match, bot) {
     if (match.photoUrl) {
       let photoToSend = match.photoUrl;
       if (!match.photoUrl.startsWith("http")) {
-        // Используем file_id напрямую
         photoToSend = match.photoUrl;
       } else {
-        // Если это URL, пробуем обновить
         const updatedUrl = await getUpdatedPhotoUrl(match.photoUrl);
-        photoToSend = updatedUrl || match.photoUrl; // Используем file_id, если обновление URL не удалось
+        photoToSend = updatedUrl || match.photoUrl;
       }
       console.log("Attempting to send photo:", photoToSend);
       await bot.sendPhoto(chatId, photoToSend, {
@@ -60,12 +66,10 @@ async function showProfileForMatching(chatId, user, match, bot) {
       await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
     }
 
-    // Отправляем клавиатуру после фото или текста
     await bot.sendMessage(chatId, "Выберите действие:", {
       reply_markup: {
         keyboard: [
-          [{ text: "Лайк" }, { text: "Дизлайк" }],
-          [{ text: "Написать" }, { text: "Стоп" }],
+          [{ text: "❤️" }, { text: "👎" }, { text: "💌" }, { text: "⛔" }],
         ],
         resize_keyboard: true,
         one_time_keyboard: false,
@@ -79,12 +83,11 @@ async function showProfileForMatching(chatId, user, match, bot) {
       { parse_mode: "Markdown" }
     );
     await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
-    // Отправляем клавиатуру даже если фото не удалось отправить
+
     await bot.sendMessage(chatId, "Выберите действие:", {
       reply_markup: {
         keyboard: [
-          [{ text: "Лайк" }, { text: "Дизлайк" }],
-          [{ text: "Написать" }, { text: "Стоп" }],
+          [{ text: "❤️" }, { text: "👎" }, { text: "💌" }, { text: "⛔" }],
         ],
         resize_keyboard: true,
         one_time_keyboard: false,
@@ -104,7 +107,7 @@ async function findMatches(user) {
       $near: {
         $geometry: {
           type: "Point",
-          coordinates: user.location.coordinates || [0, 0], // Проверка на наличие координат
+          coordinates: user.location.coordinates || [0, 0],
         },
         $maxDistance: maxDistance,
       },
@@ -114,7 +117,7 @@ async function findMatches(user) {
     _id: { $nin: [...user.likesGiven, ...user.dislikesGiven, user._id] },
   };
 
-  console.log("Match query:", query); // Логирование запроса для отладки
+  console.log("Match query:", query);
 
   const matches = await User.find(query).limit(10);
   console.log(`Found matches count: ${matches.length}`);
@@ -124,15 +127,13 @@ async function findMatches(user) {
 async function createCustomKeyboard() {
   return {
     keyboard: [
-      [{ text: "Лайк" }, { text: "Дизлайк" }],
-      [{ text: "Написать" }, { text: "Стоп" }],
+      [{ text: "❤️" }, { text: "👎" }, { text: "💌" }, { text: "⛔" }],
     ],
     resize_keyboard: true,
     one_time_keyboard: false,
   };
 }
 
-// Функция для обратного геокодирования
 async function reverseGeocode(latitude, longitude) {
   try {
     const response = await axios.get(
@@ -160,12 +161,10 @@ async function reverseGeocode(latitude, longitude) {
   }
 }
 
-// Подключаемся к базе данных и после успешного подключения запускаем бота
 connectDB()
   .then(() => {
     console.log("Database connection established");
 
-    // Основная логика бота начинается здесь
     bot.onText(/\/start/, async (msg) => {
       console.log("Команда /start получена");
       const chatId = msg.chat.id;
@@ -206,7 +205,7 @@ connectDB()
               });
             } catch (error) {
               console.error("Failed to send photo using file_id:", error);
-              // Попробуем получить новый URL
+
               try {
                 const updatedUrl = await getUpdatedPhotoUrl(photoToSend);
                 if (updatedUrl) {
@@ -235,7 +234,7 @@ connectDB()
                 }
               } catch (urlUpdateError) {
                 console.error("Failed to update photo URL:", urlUpdateError);
-                // Отправляем только текст, если и с URL не получилось
+
                 await bot.sendMessage(
                   chatId,
                   "Не удалось отправить фотографию. Вот информация о профиле:",
@@ -247,7 +246,6 @@ connectDB()
               }
             }
           } else {
-            // Если нет фото, отправляем только текст
             await bot.sendMessage(chatId, profileText, {
               parse_mode: "Markdown",
               reply_markup: {
@@ -270,7 +268,7 @@ connectDB()
           }
         } catch (error) {
           console.error("Failed to send photo:", error);
-          // В случае ошибки, отправляем только текст профиля
+
           await bot.sendMessage(
             chatId,
             "Не удалось отправить фотографию. Вот информация о профиле:",
@@ -312,7 +310,7 @@ connectDB()
           if (user.photoUrl) {
             let photoToSend = user.photoUrl.startsWith("http")
               ? user.photoUrl
-              : user.photoUrl; // Используем file_id напрямую, если это не URL
+              : user.photoUrl;
             try {
               await bot.sendPhoto(chatId, photoToSend, {
                 caption: profileText,
@@ -336,7 +334,7 @@ connectDB()
               });
             } catch (error) {
               console.error("Failed to send photo using file_id:", error);
-              // Попробуем обновить URL
+
               try {
                 const updatedUrl = await getUpdatedPhotoUrl(user.photoUrl);
                 if (updatedUrl) {
@@ -365,7 +363,7 @@ connectDB()
                 }
               } catch (urlUpdateError) {
                 console.error("Failed to update photo URL:", urlUpdateError);
-                // Отправляем только текст, если и с URL не получилось
+
                 await bot.sendMessage(
                   chatId,
                   "Не удалось отправить фотографию. Вот информация о профиле:",
@@ -393,7 +391,6 @@ connectDB()
           });
         }
       } else {
-        // Если пользователь не найден, предложите начать с создания анкеты
         bot.sendMessage(chatId, localize("pl", "profile_not_found"), {
           reply_markup: {
             inline_keyboard: [
@@ -412,6 +409,91 @@ connectDB()
     bot.on("callback_query", async (query) => {
       const chatId = query.message.chat.id;
       let user = await User.findOne({ telegramId: chatId });
+
+      if (query.data === "activate_additional_likes") {
+        console.log(
+          "Activate additional likes clicked. User state:",
+          user.dailyLikesGiven,
+          user.additionalLikesUsed
+        );
+        if (
+          !user.premium &&
+          user.dailyLikesGiven === dailyLikeLimit &&
+          !user.additionalLikesUsed
+        ) {
+          console.log("Conditions met for additional likes.");
+          user.additionalLikesUsed = true; // Устанавливаем флаг, что дополнительные лайки были использованы
+          await user.save();
+
+          bot.answerCallbackQuery(query.id, {
+            text: `Активировано ${additionalLikes} дополнительных лайков!`,
+          });
+
+          const matches = await findMatches(user);
+          if (matches.length > 0) {
+            await showProfileForMatching(chatId, user, matches[0], bot);
+          } else {
+            await bot.sendMessage(
+              chatId,
+              "Пока что анкеты закончились. Попробуйте зайти позже."
+            );
+          }
+        } else {
+          console.log("Conditions not met for additional likes.");
+          bot.answerCallbackQuery(query.id, {
+            text: "Вы уже использовали дополнительные лайки или не можете их активировать.",
+          });
+        }
+      }
+
+      if (query.data === "increase_likes") {
+        const now = new Date();
+        const startOfDay = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+
+        if (!user.lastLikeDate || user.lastLikeDate < startOfDay) {
+          await resetDailyLikes(user._id);
+          user.additionalLikesUsed = false;
+          await user.save();
+          user = await User.findOne({ telegramId: chatId });
+        }
+
+        if (
+          !user.additionalLikesUsed &&
+          user.dailyLikesGiven < dailyLikeLimit + additionalLikes
+        ) {
+          user.dailyLikesGiven = Math.min(
+            user.dailyLikesGiven + additionalLikes,
+            user.premium
+              ? premiumDailyLikeLimit
+              : dailyLikeLimit + additionalLikes
+          );
+          user.additionalLikesUsed = true;
+          await user.save();
+          bot.answerCallbackQuery(query.id, {
+            text: `Лимит лайков увеличен на ${additionalLikes}!`,
+          });
+
+          const matches = await findMatches(user);
+          if (matches.length > 0) {
+            await showProfileForMatching(chatId, user, matches[0], bot);
+          } else {
+            await bot.sendMessage(
+              chatId,
+              "Пока что анкеты закончились. Попробуйте зайти позже."
+            );
+          }
+        } else {
+          bot.answerCallbackQuery(query.id, {
+            text: user.additionalLikesUsed
+              ? "Вы уже использовали дополнительные лайки на сегодня. Для увеличения лимита возьмите премиум."
+              : "Вы уже получили максимальное количество лайков на сегодня.",
+          });
+        }
+      }
 
       if (["pl", "ru", "ua", "en"].includes(query.data)) {
         if (!user) {
@@ -480,7 +562,7 @@ connectDB()
         });
       } else if (query.data.startsWith("interested_")) {
         const interest = query.data.split("_")[1];
-        user.interestedIn = [interest]; // Начинаем с массива с одним элементом
+        user.interestedIn = [interest];
 
         if (query.data === "interested_both") {
           user.interestedIn = ["male", "female"];
@@ -502,13 +584,12 @@ connectDB()
           },
         });
       } else if (query.data === "profile_approved") {
-        // Показать кастомную клавиатуру
         await bot.sendMessage(chatId, "Переход к просмотру анкет...", {
           reply_markup: createCustomKeyboard(),
         });
 
         const matches = await findMatches(user);
-        console.log(`Matches count: ${matches.length}`); // Логирование количества найденных анкет
+        console.log(`Matches count: ${matches.length}`);
         if (matches.length > 0) {
           await showProfileForMatching(chatId, user, matches[0], bot);
         } else {
@@ -516,11 +597,10 @@ connectDB()
             chatId,
             "Пока что анкеты закончились. Попробуйте зайти позже."
           );
-          // Здесь можно добавить логику для расширения радиуса поиска или уведомления о новых анкетах
         }
       } else if (query.data === "profile_edit") {
         bot.sendMessage(chatId, localize(user.language, "age_question"));
-        // Сбросим все данные профиля, кроме telegramId и language
+
         user.age = undefined;
         user.gender = undefined;
         user.interestedIn = undefined;
@@ -640,35 +720,91 @@ connectDB()
         await user.save();
         bot.sendMessage(chatId, localize(user.language, "name_question"));
       }
-      if (msg.text === "Лайк") {
-        if (!user.likesGiven) user.likesGiven = [];
-        if (
-          !user.premium &&
-          user.likesGiven.length >= (user.lastLikeBoost ? 15 : 10)
-        ) {
-          await bot.sendMessage(
-            chatId,
-            "Вы достигли лимита лайков. Хотите получить еще 5 лайков?",
-            {
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: "Перейти на Instagram", url: "YOUR_INSTAGRAM_URL" }],
-                ],
-              },
-            }
-          );
-          return;
+      if (msg.text === "❤️") {
+        const now = new Date();
+        const startOfDay = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
+        let user = await User.findOne({ telegramId: chatId });
+
+        if (!user.lastLikeDate || user.lastLikeDate < startOfDay) {
+          await resetDailyLikes(user._id);
+          user = await User.findOne({ telegramId: chatId }); // Обновляем пользователя после сброса лайков
         }
 
+        // Определяем текущий лимит с учетом дополнительных лайков
+        const currentLimit =
+          dailyLikeLimit + (user.additionalLikesUsed ? additionalLikes : 0);
+
+        if (user.premium && user.dailyLikesGiven >= premiumDailyLikeLimit) {
+          await bot.sendMessage(
+            chatId,
+            "Вы достигли лимита лайков. Для увеличения лимита возьмите премиум."
+          );
+          return;
+        } else if (!user.premium && user.dailyLikesGiven >= currentLimit) {
+          if (!user.additionalLikesUsed) {
+            await bot.sendMessage(
+              chatId,
+              "Вы достигли лимита лайков. Перейдите на страницу Илона Маска для получения дополнительных лайков:",
+              {
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: "Перейти на X Илона Маска",
+                        url: "https://x.com/elonmusk",
+                      },
+                    ],
+                  ],
+                },
+              }
+            );
+
+            await bot.sendMessage(
+              chatId,
+              "Подтвердите переход, чтобы активировать дополнительные лайки:",
+              {
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: "Активировать дополнительные лайки",
+                        callback_data: "activate_additional_likes",
+                      },
+                    ],
+                  ],
+                },
+              }
+            );
+            return;
+          } else {
+            await bot.sendMessage(
+              chatId,
+              "Вы достигли лимита лайков. Для увеличения лимита возьмите премиум."
+            );
+            return;
+          }
+        }
+
+        // Логика лайка, если лимит не достигнут
         const matches = await findMatches(user);
         if (matches.length > 0) {
-          const currentMatch = matches[0]; // Предполагаем, что показываем первую анкету из списка
-          user.likesGiven.push(currentMatch._id.toString());
-          user.lastLikeBoost = user.lastLikeBoost || null; // Убедимся, что поле существует
-          await user.save();
-          await bot.sendMessage(chatId, "Пользователь лайкнут", {
-            reply_markup: createCustomKeyboard(),
-          });
+          const currentMatch = matches[0];
+          await addLike(user._id, currentMatch._id);
+          await bot.sendMessage(
+            chatId,
+            `Пользователь лайкнут. Осталось лайков: ${
+              user.premium
+                ? premiumDailyLikeLimit - user.dailyLikesGiven - 1
+                : currentLimit - user.dailyLikesGiven - 1
+            }`,
+            {
+              reply_markup: createCustomKeyboard(),
+            }
+          );
           // Показать следующую анкету, если она есть
           matches.shift(); // Удаляем текущую анкету из списка
           if (matches.length > 0) {
@@ -680,15 +816,14 @@ connectDB()
             );
           }
         }
-      } else if (msg.text === "Дизлайк") {
-        // Похожий подход для дизлайка
+      } else if (msg.text === "👎") {
         if (!user.dislikesGiven) user.dislikesGiven = [];
         const matches = await findMatches(user);
         if (matches.length > 0) {
           const currentMatch = matches[0];
           user.dislikesGiven.push(currentMatch._id.toString());
           await user.save();
-          // Показать следующую анкету, если она есть
+
           matches.shift();
           if (matches.length > 0) {
             await showProfileForMatching(chatId, user, matches[0], bot);
@@ -699,17 +834,13 @@ connectDB()
             );
           }
         }
-      } else if (msg.text === "Стоп") {
+      } else if (msg.text === "⛔") {
         await bot.sendMessage(chatId, "Остановка просмотра анкет.", {
           reply_markup: { remove_keyboard: true },
         });
-        await myProfileCommand(msg, bot); // Используем существующую функцию для показа профиля пользователя
-      } else if (msg.text === "Написать") {
-        // Пока просто кнопка без функционала
-        await bot.sendMessage(
-          chatId,
-          "Функционал 'Написать' будет добавлен позже."
-        );
+        await myProfileCommand(msg, bot);
+      } else if (msg.text === "💌") {
+        await bot.sendMessage(chatId, "Функционал '💌' будет добавлен позже.");
       }
     });
   })

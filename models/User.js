@@ -34,6 +34,10 @@ const UserSchema = new Schema({
   subscriptionStatus: { type: String, default: "free" },
   views: { type: Number, default: 0 },
   lastLikeBoost: { type: Date },
+  lastLikeDate: { type: Date },
+  dailyLikesGiven: { type: Number, default: 0 },
+  additionalLikesUsed: { type: Boolean, default: false },
+  matches: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 });
 
 UserSchema.index({ location: "2dsphere" });
