@@ -8,6 +8,21 @@ async function handleCallbackQuery(query, bot) {
   let user = await User.findOne({ telegramId: chatId });
 
   switch (query.data) {
+    case query.data === "stop_conversation":
+    case query.data.startsWith("stop_conversation_"):
+      await handleStopConversation(
+        user,
+        query.data.split("_")[2] || null,
+        chatId,
+        bot
+      );
+      break;
+    case "send_message_yes":
+      await handleSendMessageConfirmation(user, chatId, bot);
+      break;
+    case "send_message_no":
+      await commandHandlers.handleMyProfile({ chat: { id: chatId } }, bot);
+      break;
     case "return_to_profile":
       await commandHandlers.handleMyProfile({ chat: { id: chatId } }, bot);
       break;
@@ -33,13 +48,25 @@ async function handleCallbackQuery(query, bot) {
       await handleStopChat(chatId, user, bot);
       break;
     default:
-      if (query.data.startsWith("start_chat_")) {
+      if (query.data.startsWith("stop_conversation_")) {
+        const otherUserId = query.data.split("_")[2];
+        await handleStopConversation(user, otherUserId, chatId, bot);
+      } else if (query.data.startsWith("start_chat_")) {
         await handleStartChat(user, query.data.split("_")[2], bot);
       } else {
         await handleDefaultCallback(user, chatId, query, bot);
       }
   }
   bot.answerCallbackQuery(query.id);
+}
+
+async function findCurrentMatch(user) {
+  const matches = await findMatches(user);
+  if (matches.length > 0) {
+    // Возвращаем последний матч, предполагая, что это текущий просматриваемый профиль
+    return matches[0];
+  }
+  return null;
 }
 
 async function handleDeleteProfileConfirmation(chatId, bot) {
@@ -287,38 +314,23 @@ async function handleStopChat(chatId, user, bot) {
   if (user.currentChatPartner) {
     const chatPartner = await User.findById(user.currentChatPartner);
     if (chatPartner) {
-      // Уведомляем обоих пользователей о прерывании переписки
       await bot.sendMessage(user.telegramId, "Вы прервали переписку.");
       await bot.sendMessage(
         chatPartner.telegramId,
         "Ваша переписка была прервана."
       );
 
-      // Убираем текущего партнера по чату и добавляем в endedChats для обоих пользователей
-      await User.findByIdAndUpdate(user._id, {
-        $unset: { currentChatPartner: 1 },
-        $addToSet: { endedChats: chatPartner._id },
-      });
-      await User.findByIdAndUpdate(chatPartner._id, {
-        $unset: { currentChatPartner: 1 },
-        $addToSet: { endedChats: user._id },
-      });
-
-      // Удаляем друг друга из availableChatPartners
-      await User.findByIdAndUpdate(user._id, {
-        $pull: { availableChatPartners: chatPartner._id },
-      });
-      await User.findByIdAndUpdate(chatPartner._id, {
-        $pull: { availableChatPartners: user._id },
-      });
-
-      // Удаляем друг друга из списка матчей, чтобы предотвратить повторное начало переписки
-      await User.findByIdAndUpdate(user._id, {
-        $pull: { matches: chatPartner._id },
-      });
-      await User.findByIdAndUpdate(chatPartner._id, {
-        $pull: { matches: user._id },
-      });
+      await User.updateMany(
+        { _id: { $in: [user._id, chatPartner._id] } },
+        {
+          $unset: { currentChatPartner: 1 },
+          $addToSet: { endedChats: { $each: [user._id, chatPartner._id] } },
+          $pull: {
+            matches: { $each: [user._id, chatPartner._id] },
+            availableChatPartners: { $each: [user._id, chatPartner._id] },
+          },
+        }
+      );
     } else {
       await bot.sendMessage(
         chatId,
@@ -333,6 +345,83 @@ async function handleStopChat(chatId, user, bot) {
       chatId,
       "У вас нет текущей переписки для прерывания."
     );
+  }
+}
+
+async function handleStopConversation(user, otherUserId, chatId, bot) {
+  if (otherUserId) {
+    const otherUser = await User.findById(otherUserId);
+    if (otherUser) {
+      await User.updateMany(
+        { _id: { $in: [user._id, otherUserId] } },
+        {
+          $unset: { currentChatPartner: 1 },
+          $addToSet: { endedChats: { $each: [user._id, otherUserId] } },
+        }
+      );
+      await bot.sendMessage(user.telegramId, "Вы завершили беседу.");
+      await bot.sendMessage(
+        otherUser.telegramId,
+        "Беседа с вами была завершена."
+      );
+    } else {
+      await bot.sendMessage(
+        chatId,
+        "Пользователь, с которым вы пытались общаться, не найден."
+      );
+    }
+  } else {
+    if (user.currentChatPartner) {
+      const chatPartner = await User.findById(user.currentChatPartner);
+      if (chatPartner) {
+        await User.updateMany(
+          { _id: { $in: [user._id, chatPartner._id] } },
+          {
+            $unset: { currentChatPartner: 1 },
+            $addToSet: { endedChats: { $each: [user._id, chatPartner._id] } },
+          }
+        );
+        await bot.sendMessage(user.telegramId, "Вы завершили беседу.");
+        await bot.sendMessage(
+          chatPartner.telegramId,
+          "Беседа с вами была завершена."
+        );
+      } else {
+        await bot.sendMessage(
+          chatId,
+          "Пользователь, с которым вы пытались общаться, не найден."
+        );
+        await User.findByIdAndUpdate(user._id, {
+          $unset: { currentChatPartner: 1 },
+        });
+      }
+    } else {
+      await bot.sendMessage(chatId, "У вас нет текущей беседы для завершения.");
+    }
+  }
+}
+
+async function handleSendMessageConfirmation(user, chatId, bot) {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (!user.lastMessageDate || user.lastMessageDate < startOfDay) {
+    await User.findByIdAndUpdate(user._id, { lastMessageDate: now });
+    const match = await findCurrentMatch(user);
+    if (match) {
+      // Устанавливаем обоих как партнеров по чату
+      await User.findByIdAndUpdate(user._id, {
+        currentMessageRecipient: match._id,
+      });
+      // Уведомление отправляется только в sendMessageToUser
+      await bot.sendMessage(chatId, "Введите ваше сообщение:");
+    } else {
+      await bot.sendMessage(
+        chatId,
+        "Не удалось найти пользователя для отправки сообщения."
+      );
+    }
+  } else {
+    await bot.sendMessage(chatId, "Вы уже использовали эту функцию сегодня.");
   }
 }
 

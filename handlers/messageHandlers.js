@@ -10,9 +10,46 @@ const { showProfileForMatching, findMatches } = require("../utils/profileUtil");
 
 async function handleMessage(msg, bot) {
   const chatId = msg.chat.id;
-  let user = await User.findOne({ telegramId: chatId });
+  let user = await User.findOne({ telegramId: chatId }).lean(false);
 
   if (!user) return;
+
+  if (user.currentMessageRecipient || user.currentChatPartner) {
+    // Объединяем логику для отправки сообщения
+    let recipient;
+    if (user.currentMessageRecipient) {
+      recipient = await User.findById(user.currentMessageRecipient);
+      if (recipient) {
+        await sendMessageToUser(user, recipient, msg.text, bot);
+        // Очищаем currentMessageRecipient после отправки только если это первое сообщение
+        await User.findByIdAndUpdate(user._id, {
+          $unset: { currentMessageRecipient: 1 },
+          currentChatPartner: recipient._id,
+        });
+      } else {
+        await bot.sendMessage(
+          chatId,
+          "Пользователь, которому вы пытались отправить сообщение, не найден."
+        );
+        await User.findByIdAndUpdate(user._id, {
+          $unset: { currentMessageRecipient: 1 },
+        });
+      }
+    } else if (user.currentChatPartner) {
+      recipient = await User.findById(user.currentChatPartner);
+      if (recipient) {
+        await sendMessageToUser(user, recipient, msg.text, bot); // Используем sendMessageToUser для обоих случаев
+      } else {
+        await bot.sendMessage(
+          chatId,
+          "Ваш собеседник не найден. Переписка прервана."
+        );
+        await User.findByIdAndUpdate(user._id, {
+          $unset: { currentChatPartner: 1 },
+        });
+      }
+    }
+  }
 
   if (
     msg.text &&
@@ -126,12 +163,65 @@ async function handleMessage(msg, bot) {
       },
     });
   } else if (msg.text === "💌") {
-    // Обработка сообщения
-    await bot.sendMessage(chatId, "Функционал '💌' будет добавлен позже.");
+    const now = new Date();
+    const startOfDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+    const user = await User.findOne({ telegramId: chatId });
+
+    if (!user.premium) {
+      await bot.sendMessage(
+        chatId,
+        "Извините, вы можете написать без совпадения по лайкам только с премиум подпиской. Для возвращения на анкету нажмите /myprofile"
+      );
+    } else {
+      if (!user.lastMessageDate || user.lastMessageDate < startOfDay) {
+        await handlePremiumSendMessage(user, chatId, bot);
+      } else {
+        await bot.sendMessage(
+          chatId,
+          "Извините. Вы исчерпали свой лимит на сегодня."
+        );
+      }
+    }
   } else if (msg.text && user.matches.length > 0) {
     // Обработка чат-сообщений только если у пользователя есть хотя бы один матч
-    await handleChatMessage(msg, user, bot);
+    // await handleChatMessage(msg, user, bot);
   }
+}
+
+async function handlePremiumSendMessage(user, chatId, bot) {
+  const match = await findCurrentMatch(user); // Предполагаем, что мы знаем, какой матч сейчас просматривается
+  if (match) {
+    await bot.sendMessage(
+      chatId,
+      "Вы можете отправить сообщение без совпадения по лайкам только один раз в сутки. Вы согласны?",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "ДА", callback_data: "send_message_yes" }],
+            [{ text: "НЕТ", callback_data: "send_message_no" }],
+          ],
+        },
+      }
+    );
+  } else {
+    await bot.sendMessage(
+      chatId,
+      "Не удалось найти пользователя для отправки сообщения."
+    );
+  }
+}
+
+async function findCurrentMatch(user) {
+  // Логика для нахождения текущего матча, например, последний просмотренный профиль
+  // Это может быть последний элемент массива matches или специальное поле для текущего матча
+  return await User.findOne({
+    _id: { $in: user.matches },
+    _id: { $ne: user._id },
+  }).sort({ registrationDate: -1 });
 }
 
 async function handleLike(chatId, user, bot) {
@@ -255,64 +345,83 @@ async function handleDislike(chatId, user, bot) {
   }
 }
 
-async function handleChatMessage(msg, user, bot) {
-  if (user.currentChatPartner) {
-    const chatPartner = await User.findById(user.currentChatPartner);
-    if (chatPartner) {
-      await bot.sendMessage(
-        chatPartner.telegramId,
-        `${user.name}: ${msg.text}`
-      );
-    } else {
-      await bot.sendMessage(
-        user.telegramId,
-        "Пользователь, с которым вы пытались общаться, не найден."
-      );
-      await User.findByIdAndUpdate(user._id, {
-        $unset: { currentChatPartner: 1 },
-      });
-    }
-  } else {
-    // Предположим, что пользователь хочет начать переписку с последним матчем
-    const lastMatch = user.matches[user.matches.length - 1];
-    if (lastMatch) {
-      const matchUser = await User.findById(lastMatch);
-      if (matchUser) {
-        // Уведомляем обеих пользователей о начале переписки
-        await bot.sendMessage(
-          user.telegramId,
-          `Начинаете переписку с ${matchUser.name}.`
-        );
-        await bot.sendMessage(
-          matchUser.telegramId,
-          `Начинается переписка с ${user.name}.`
-        );
-        // Устанавливаем currentChatPartner
-        await User.findByIdAndUpdate(user._id, {
-          currentChatPartner: matchUser._id,
-        });
-        await User.findByIdAndUpdate(matchUser._id, {
-          currentChatPartner: user._id,
-        });
-        // Отправляем сообщение партнеру
-        await bot.sendMessage(
-          matchUser.telegramId,
-          `${user.name}: ${msg.text}`
-        );
-      } else {
-        await bot.sendMessage(
-          user.telegramId,
-          "Не удалось найти последнего матча для начала переписки."
-        );
-      }
-    } else {
-      await bot.sendMessage(
-        user.telegramId,
-        "У вас нет текущего чата. Начните с лайка, чтобы найти матч."
-      );
-    }
-  }
-}
+// async function handleChatMessage(msg, user, bot) {
+//   if (user.currentChatPartner) {
+//     const chatPartner = await User.findById(user.currentChatPartner);
+//     if (chatPartner) {
+//       await bot.sendMessage(
+//         chatPartner.telegramId,
+//         `${user.name}: ${msg.text}`,
+//         {
+//           reply_markup: {
+//             inline_keyboard: [
+//               [
+//                 {
+//                   text: "Завершить беседу",
+//                   callback_data: `stop_conversation_${user._id}`,
+//                 },
+//               ],
+//             ],
+//           },
+//         }
+//       );
+//       await bot.sendMessage(user.telegramId, "Сообщение отправлено.", {
+//         reply_markup: {
+//           inline_keyboard: [
+//             [{ text: "Завершить беседу", callback_data: "stop_conversation" }],
+//           ],
+//         },
+//       });
+//     } else {
+//       await bot.sendMessage(
+//         user.telegramId,
+//         "Пользователь, с которым вы пытались общаться, не найден."
+//       );
+//       await User.findByIdAndUpdate(user._id, {
+//         $unset: { currentChatPartner: 1 },
+//       });
+//     }
+//   } else {
+//     // Предположим, что пользователь хочет начать переписку с последним матчем
+//     const lastMatch = user.matches[user.matches.length - 1];
+//     if (lastMatch) {
+//       const matchUser = await User.findById(lastMatch);
+//       if (matchUser) {
+//         // Уведомляем обеих пользователей о начале переписки
+//         await bot.sendMessage(
+//           user.telegramId,
+//           `Начинаете переписку с ${matchUser.name}.`
+//         );
+//         await bot.sendMessage(
+//           matchUser.telegramId,
+//           `Начинается переписка с ${user.name}.`
+//         );
+//         // Устанавливаем currentChatPartner
+//         await User.findByIdAndUpdate(user._id, {
+//           currentChatPartner: matchUser._id,
+//         });
+//         await User.findByIdAndUpdate(matchUser._id, {
+//           currentChatPartner: user._id,
+//         });
+//         // Отправляем сообщение партнеру
+//         await bot.sendMessage(
+//           matchUser.telegramId,
+//           `${user.name}: ${msg.text}`
+//         );
+//       } else {
+//         await bot.sendMessage(
+//           user.telegramId,
+//           "Не удалось найти последнего матча для начала переписки."
+//         );
+//       }
+//     } else {
+//       await bot.sendMessage(
+//         user.telegramId,
+//         "У вас нет текущего чата. Начните с лайка, чтобы найти матч."
+//       );
+//     }
+//   }
+// }
 
 async function notifyMatch(user, match, bot) {
   try {
@@ -407,6 +516,45 @@ async function notifyMatch(user, match, bot) {
     });
   } catch (error) {
     console.error("Error notifying match:", error);
+  }
+}
+
+async function sendMessageToUser(sender, recipient, messageText, bot) {
+  try {
+    const senderKeyboard = {
+      inline_keyboard: [
+        [{ text: "Завершить беседу", callback_data: "stop_conversation" }],
+      ],
+    };
+    const recipientKeyboard = {
+      inline_keyboard: [
+        [
+          {
+            text: "Завершить беседу",
+            callback_data: `stop_conversation_${sender._id}`,
+          },
+        ],
+      ],
+    };
+
+    // Изменяем сообщение для получателя
+    await sendNotificationWithPhoto(
+      recipient.telegramId,
+      sender,
+      bot,
+      recipientKeyboard,
+      `У вас новое сообщение от ${sender.name}:\n${messageText}`
+    );
+    // Отправляем подтверждение отправителю только здесь
+    await bot.sendMessage(sender.telegramId, "Сообщение отправлено.", {
+      reply_markup: senderKeyboard,
+    });
+  } catch (error) {
+    console.error("Error sending message to user:", error);
+    await bot.sendMessage(
+      sender.telegramId,
+      "Не удалось отправить сообщение. Попробуйте позже."
+    );
   }
 }
 
