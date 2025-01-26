@@ -26,6 +26,7 @@ async function handleMessage(msg, bot) {
           $unset: { currentMessageRecipient: 1 },
           currentChatPartner: recipient._id,
         });
+        // Не отправляем сообщение о подтверждении здесь, так как это делается в sendMessageToUser
       } else {
         await bot.sendMessage(
           chatId,
@@ -38,7 +39,8 @@ async function handleMessage(msg, bot) {
     } else if (user.currentChatPartner) {
       recipient = await User.findById(user.currentChatPartner);
       if (recipient) {
-        await sendMessageToUser(user, recipient, msg.text, bot); // Используем sendMessageToUser для обоих случаев
+        // Отправляем сообщение только один раз
+        await sendMessageToUser(user, recipient, msg.text, bot); // Используем sendMessageToUser для единой точки отправки
       } else {
         await bot.sendMessage(
           chatId,
@@ -537,7 +539,7 @@ async function sendMessageToUser(sender, recipient, messageText, bot) {
       ],
     };
 
-    // Изменяем сообщение для получателя
+    // Отправляем сообщение получателю
     await sendNotificationWithPhoto(
       recipient.telegramId,
       sender,
@@ -545,16 +547,12 @@ async function sendMessageToUser(sender, recipient, messageText, bot) {
       recipientKeyboard,
       `У вас новое сообщение от ${sender.name}:\n${messageText}`
     );
-    // Отправляем подтверждение отправителю только здесь
+    // Отправляем подтверждение отправителю
     await bot.sendMessage(sender.telegramId, "Сообщение отправлено.", {
       reply_markup: senderKeyboard,
     });
   } catch (error) {
-    console.error("Error sending message to user:", error);
-    await bot.sendMessage(
-      sender.telegramId,
-      "Не удалось отправить сообщение. Попробуйте позже."
-    );
+    // Обработка ошибок
   }
 }
 

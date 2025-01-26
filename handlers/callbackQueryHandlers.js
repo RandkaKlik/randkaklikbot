@@ -411,9 +411,17 @@ async function handleSendMessageConfirmation(user, chatId, bot) {
       // Устанавливаем обоих как партнеров по чату
       await User.findByIdAndUpdate(user._id, {
         currentMessageRecipient: match._id,
+        currentChatPartner: match._id,
       });
-      // Уведомление отправляется только в sendMessageToUser
+      await User.findByIdAndUpdate(match._id, {
+        currentChatPartner: user._id,
+      });
       await bot.sendMessage(chatId, "Введите ваше сообщение:");
+      // Уведомляем получателя о новом сообщении
+      await bot.sendMessage(
+        match.telegramId,
+        `У вас новое сообщение от ${user.name}.`
+      );
     } else {
       await bot.sendMessage(
         chatId,
