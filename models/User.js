@@ -27,6 +27,7 @@ const UserSchema = new Schema({
   about: { type: String },
   photoUrl: { type: String },
   premium: { type: Boolean, default: false },
+  complained: { type: Boolean, default: false },
   likesGiven: [{ type: String }],
   dislikesGiven: [{ type: String }],
   likesReceived: [{ type: String }],
@@ -47,6 +48,7 @@ const UserSchema = new Schema({
   availableChatPartners: [
     { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   ],
+  viewCount: { type: Number, default: 0 },
   endedChats: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 });
 

@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const { localize } = require("../utils/localization");
+const Advertisement = require("../models/Advertisement");
 const { reverseGeocode } = require("../utils/locationUtil");
 const {
   addLike,
@@ -13,6 +14,85 @@ async function handleMessage(msg, bot) {
   let user = await User.findOne({ telegramId: chatId }).lean(false);
 
   if (!user) return;
+
+  if (!user.viewCount) user.viewCount = 0;
+  user.viewCount++;
+  await user.save();
+
+  if (user.viewCount % 20 === 0) {
+    const ad = await Advertisement.findOne({ active: true }).lean();
+    if (ad) {
+      if (ad.imageUrl) {
+        await bot.sendPhoto(chatId, ad.imageUrl, {
+          caption: `${ad.text}\n[Перейти к сообществу](${ad.link})`,
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [[{ text: "Перейти к сообществу", url: ad.link }]],
+          },
+        });
+      } else {
+        await bot.sendMessage(
+          chatId,
+          `${ad.text}\n[Перейти к сообществу](${ad.link})`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "Перейти к сообществу", url: ad.link }],
+              ],
+            },
+          }
+        );
+      }
+      // Задержка перед показом следующей анкеты
+      const delay = Math.floor(Math.random() * (7000 - 5000 + 1) + 5000); // Случайная задержка от 5 до 7 секунд
+      setTimeout(async () => {
+        const matches = await findMatches(user);
+        if (matches.length > 0) {
+          await showProfileForMatching(chatId, user, matches[0], bot);
+        } else {
+          await bot.sendMessage(
+            chatId,
+            "Больше анкет нет. Попробуйте зайти позже."
+          );
+        }
+      }, delay);
+      return; // Прерываем дальнейшую обработку, так как реклама уже показана
+    }
+  }
+
+  if (msg.text === "/complaint") {
+    const currentMatches = await findMatches(user);
+    if (currentMatches.length > 0) {
+      const currentMatch = currentMatches[0]; // Предполагаем, что первый матч - это текущий просматриваемый профиль
+      await User.findByIdAndUpdate(currentMatch._id, { complained: true });
+      await bot.sendMessage(
+        chatId,
+        "Благодарим. Администрация ознакомится с вашей жалобой."
+      );
+
+      // Отмечаем текущий просматриваемый профиль как дизлайкнутый
+      if (!user.dislikesGiven) user.dislikesGiven = [];
+      user.dislikesGiven.push(currentMatch._id.toString());
+      await user.save();
+
+      // Показываем следующую анкету
+      currentMatches.shift();
+      if (currentMatches.length > 0) {
+        await showProfileForMatching(chatId, user, currentMatches[0], bot);
+      } else {
+        await bot.sendMessage(
+          chatId,
+          "Больше анкет нет. Попробуйте зайти позже."
+        );
+      }
+    } else {
+      await bot.sendMessage(
+        chatId,
+        "Это можно делать только когда вы просматриваете анкеты."
+      );
+    }
+  }
 
   if (user.currentMessageRecipient || user.currentChatPartner) {
     // Объединяем логику для отправки сообщения
