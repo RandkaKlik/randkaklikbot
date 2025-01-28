@@ -20,8 +20,10 @@ async function handleMessage(msg, bot) {
   await user.save();
 
   if (msg.text === "/premium") {
-    const premiumMessage = localize(user.language, "contact_admin_for_premium");
-    await bot.sendMessage(chatId, `${premiumMessage} @datingadminacc`);
+    await bot.sendMessage(
+      chatId,
+      `${localize(user.language, "contact_admin_for_premium")} @datingadminacc`
+    );
   }
 
   if (user.viewCount % 20 === 0) {
@@ -321,13 +323,18 @@ async function handleLike(chatId, user, bot) {
   const currentLimit = 10 + (user.additionalLikesUsed ? 5 : 0);
 
   if (user.premium && user.dailyLikesGiven >= 25) {
-    await bot.sendMessage(
-      chatId,
-      "Вы достигли лимита лайков. Для увеличения лимита возьмите премиум."
-    );
+    await bot.sendMessage(chatId, localize(user.language, "premium_likes"));
     return;
   } else if (!user.premium && user.dailyLikesGiven >= currentLimit) {
     if (!user.additionalLikesUsed) {
+      const urls = [
+        { platform: "Instagram", url: "https://www.instagram.com/elonmusk/" },
+        { platform: "X", url: "https://x.com/elonmusk" },
+        { platform: "Telegram", url: "https://t.me/elonmusk" },
+      ];
+
+      const randomUrl = urls[Math.floor(Math.random() * urls.length)];
+
       const firstMessage = await bot.sendMessage(
         chatId,
         localize(user.language, "like_limit_reached"),
@@ -336,8 +343,8 @@ async function handleLike(chatId, user, bot) {
             inline_keyboard: [
               [
                 {
-                  text: "Перейти на X Илона Маска",
-                  url: "https://x.com/elonmusk",
+                  text: randomUrl.platform,
+                  url: randomUrl.url,
                 },
               ],
             ],
