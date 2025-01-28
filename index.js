@@ -27,11 +27,11 @@ connectDB()
   })
   .catch((err) => console.error("Failed to connect to database:", err));
 
-const webhookUrl = "https://randkaklik.onrender.com/webhook";
+// const webhookUrl = "https://randkaklik.onrender.com/webhook";
 
-bot.setWebHook(webhookUrl);
+// bot.setWebHook(webhookUrl);
 
-app.use(bot.webhookCallback("/webhook"));
+// app.use(bot.webhookCallback("/webhook"));
 
 app.get("/", (req, res) => {
   console.log("Mmm... I’m Mr. Frundles");
@@ -40,5 +40,5 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 443;
 app.listen(PORT, () => {
-  console.log(`Server is running on ${webhookUrl}`);
+  console.log(`Server is running`);
 });
