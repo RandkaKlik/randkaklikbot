@@ -32,7 +32,6 @@ connectDB()
 // bot.setWebHook(webhookUrl);
 
 // app.use(bot.webhookCallback("/webhook"));
-
 app.get("/", (req, res) => {
   console.log("Mmm... I’m Mr. Frundles");
   res.send("Bot is running!");
