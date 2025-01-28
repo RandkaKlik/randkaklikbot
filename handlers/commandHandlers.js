@@ -31,13 +31,13 @@ async function handleStart(msg, bot) {
             inline_keyboard: [
               [
                 {
-                  text: localize(user.language, "yes"),
+                  text: localize(user.language, "go_to_profiles"),
                   callback_data: "profile_approved",
                 },
               ],
               [
                 {
-                  text: localize(user.language, "no"),
+                  text: localize(user.language, "return_to_edit"),
                   callback_data: "profile_edit",
                 },
               ],
@@ -49,7 +49,7 @@ async function handleStart(msg, bot) {
       console.error("Failed to send photo:", error);
       await bot.sendMessage(
         chatId,
-        "Не удалось отправить фотографию. Вот информация о профиле:",
+        localize(user.language, "error_sending_photo"),
         { parse_mode: "Markdown" }
       );
       await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
@@ -97,7 +97,7 @@ async function handleMyProfile(msg, bot) {
       console.error("Failed to send photo:", error);
       await bot.sendMessage(
         chatId,
-        "Не удалось отправить фотографию. Вот информация о профиле:",
+        localize(user.language, "error_sending_photo"),
         { parse_mode: "Markdown" }
       );
       await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
@@ -134,11 +134,16 @@ async function sendProfileWithPhoto(
         inline_keyboard: [
           [
             {
-              text: localize(language, "yes"),
+              text: localize(language, "go_to_profiles"),
               callback_data: "profile_approved",
             },
           ],
-          [{ text: localize(language, "no"), callback_data: "profile_edit" }],
+          [
+            {
+              text: localize(language, "return_to_edit"),
+              callback_data: "profile_edit",
+            },
+          ],
         ],
       },
     });
@@ -153,11 +158,16 @@ async function sendProfileWithPhoto(
           inline_keyboard: [
             [
               {
-                text: localize(language, "yes"),
+                text: localize(language, "go_to_profiles"),
                 callback_data: "profile_approved",
               },
             ],
-            [{ text: localize(language, "no"), callback_data: "profile_edit" }],
+            [
+              {
+                text: localize(language, "return_to_edit"),
+                callback_data: "profile_edit",
+              },
+            ],
           ],
         },
       });

@@ -89,14 +89,29 @@ async function findCurrentMatch(user) {
 }
 
 async function handleDeleteProfileConfirmation(chatId, bot) {
-  await bot.sendMessage(chatId, "Вы уверены, что хотите удалить профиль?", {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "ДА", callback_data: "confirm_delete" }],
-        [{ text: "НЕТ", callback_data: "cancel_delete" }],
-      ],
-    },
-  });
+  let user = await User.findOne({ telegramId: chatId });
+  await bot.sendMessage(
+    chatId,
+    localize(user.language, "shure_delete_profile"),
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: localize(user.language, "yes"),
+              callback_data: "confirm_delete",
+            },
+          ],
+          [
+            {
+              text: localize(user.language, "no"),
+              callback_data: "cancel_delete",
+            },
+          ],
+        ],
+      },
+    }
+  );
 }
 
 async function handleProfileDeletion(chatId, user, bot) {
@@ -118,13 +133,13 @@ async function handleProfileDeletion(chatId, user, bot) {
 
     await bot.sendMessage(
       chatId,
-      "Жаль, что вы решили нас покинуть. Если решите вернуться, нажмите /start"
+      localize(user.language, "last_message_delete_user")
     );
   } catch (error) {
     console.error("Error deleting profile:", error);
     await bot.sendMessage(
       chatId,
-      "Ошибка при удалении профиля. Попробуйте еще раз."
+      localize(user.language, "error_delete_profile")
     );
   }
 }
@@ -138,27 +153,24 @@ async function handleActivateAdditionalLikes(user, chatId, query, bot) {
     user.additionalLikesUsed = true;
     await user.save();
     bot.answerCallbackQuery(query.id, {
-      text: `Активировано 5 дополнительных лайков!`,
+      text: localize(user.language, "extra_likes_activated"),
     });
 
     const matches = await findMatches(user);
     if (matches.length > 0) {
       await showProfileForMatching(chatId, user, matches[0], bot);
     } else {
-      await bot.sendMessage(
-        chatId,
-        "Пока что анкеты закончились. Попробуйте зайти позже."
-      );
+      await bot.sendMessage(chatId, localize(user.language, "no_profiles"));
     }
   } else {
     bot.answerCallbackQuery(query.id, {
-      text: "Вы уже использовали дополнительные лайки или не можете их активировать.",
+      text: localize(user.language, "extra_likes_unavailable"),
     });
   }
 }
 
 async function handleProfileApproved(user, chatId, bot) {
-  await bot.sendMessage(chatId, "Переход к просмотру анкет...", {
+  await bot.sendMessage(chatId, localize(user.language, "view_profiles"), {
     reply_markup: {
       keyboard: [
         [{ text: "❤️" }, { text: "👎" }, { text: "💌" }, { text: "⛔" }],
@@ -172,10 +184,7 @@ async function handleProfileApproved(user, chatId, bot) {
   if (matches.length > 0) {
     await showProfileForMatching(chatId, user, matches[0], bot);
   } else {
-    await bot.sendMessage(
-      chatId,
-      "Пока что анкеты закончились. Попробуйте зайти позже."
-    );
+    await bot.sendMessage(chatId, localize(user.language, "no_profiles"));
   }
 }
 
@@ -189,7 +198,7 @@ async function handleProfileEdit(user, chatId, bot) {
   user.location = { type: "Point", coordinates: [0, 0] };
   user.name = undefined;
   user.about = undefined;
-  user.photoUrl = no_photo.jpg;
+  user.photoUrl = undefined;
   await user.save();
 }
 
@@ -307,7 +316,7 @@ async function handleSendMessageConfirmation(user, chatId, bot) {
           inline_keyboard: [
             [
               {
-                text: "Начать чат",
+                text: localize(user.language, "start_conversation"),
                 url: `tg://user?id=${match.telegramId}`,
               },
             ],
@@ -317,24 +326,27 @@ async function handleSendMessageConfirmation(user, chatId, bot) {
       try {
         await bot.sendMessage(
           chatId,
-          `Вы можете начать чат с ${match.name}:`,
+          `${localize(user.language, "conversation_started")} ${match.name}:`,
           chatButton
         );
       } catch (error) {
         console.error("Error sending message with chat button:", error);
         await bot.sendMessage(
           chatId,
-          "Ошибка при создании кнопки для начала чата. Пользователь может быть недоступен или ID некорректен."
+          localize(user.language, "conversation_not_started")
         );
       }
     } else {
       await bot.sendMessage(
         chatId,
-        "Не удалось найти пользователя для отправки сообщения."
+        localize(user.language, "conversation_not_started")
       );
     }
   } else {
-    await bot.sendMessage(chatId, "Вы уже использовали эту функцию сегодня.");
+    await bot.sendMessage(
+      chatId,
+      localize(user.language, "feature_used_today")
+    );
   }
 }
 

@@ -29,7 +29,7 @@ async function showProfileForMatching(chatId, user, match, bot) {
       await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
     }
 
-    await bot.sendMessage(chatId, "Выберите действие:", {
+    await bot.sendMessage(chatId, localize(user.language, "selects_one"), {
       reply_markup: {
         keyboard: [
           [{ text: "❤️" }, { text: "👎" }, { text: "💌" }, { text: "⛔" }],
@@ -42,12 +42,14 @@ async function showProfileForMatching(chatId, user, match, bot) {
     console.error("Failed to send photo:", error);
     await bot.sendMessage(
       chatId,
-      "Не удалось отправить фотографию. Вот информация о другом профиле:",
-      { parse_mode: "Markdown" }
+      localize(user.language, "error_sending_photo"),
+      {
+        parse_mode: "Markdown",
+      }
     );
     await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
 
-    await bot.sendMessage(chatId, "Выберите действие:", {
+    await bot.sendMessage(chatId, localize(user.language, "selects_one"), {
       reply_markup: {
         keyboard: [
           [{ text: "❤️" }, { text: "👎" }, { text: "💌" }, { text: "⛔" }],
@@ -60,10 +62,6 @@ async function showProfileForMatching(chatId, user, match, bot) {
 }
 
 async function findMatches(user) {
-  console.log("User location:", user.location);
-  console.log("User interestedIn:", user.interestedIn);
-  console.log("User gender:", user.gender);
-
   const maxDistance = 100 * 1000;
   const query = {
     location: {
@@ -83,12 +81,9 @@ async function findMatches(user) {
     },
   };
 
-  console.log("Match query:", query);
-
   const matches = await User.find(query)
     .sort({ registrationDate: -1 })
     .limit(10);
-  console.log(`Found matches count: ${matches.length}`);
   return matches;
 }
 

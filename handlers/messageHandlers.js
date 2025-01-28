@@ -29,21 +29,38 @@ async function handleMessage(msg, bot) {
     if (ad) {
       if (ad.imageUrl) {
         await bot.sendPhoto(chatId, ad.imageUrl, {
-          caption: `${ad.text}\n[Перейти к сообществу](${ad.link})`,
+          caption: `${ad.text}\n[${localize(
+            user.language,
+            "go_to_community"
+          )}](${ad.link})`,
           parse_mode: "Markdown",
           reply_markup: {
-            inline_keyboard: [[{ text: "Перейти к сообществу", url: ad.link }]],
+            inline_keyboard: [
+              [
+                {
+                  text: localize(user.language, "go_to_community"),
+                  url: ad.link,
+                },
+              ],
+            ],
           },
         });
       } else {
         await bot.sendMessage(
           chatId,
-          `${ad.text}\n[Перейти к сообществу](${ad.link})`,
+          `${ad.text}\n[${localize(user.language, "go_to_community")}](${
+            ad.link
+          })`,
           {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
-                [{ text: "Перейти к сообществу", url: ad.link }],
+                [
+                  {
+                    text: localize(user.language, "go_to_community"),
+                    url: ad.link,
+                  },
+                ],
               ],
             },
           }
@@ -56,10 +73,7 @@ async function handleMessage(msg, bot) {
         if (matches.length > 0) {
           await showProfileForMatching(chatId, user, matches[0], bot);
         } else {
-          await bot.sendMessage(
-            chatId,
-            "Больше анкет нет. Попробуйте зайти позже."
-          );
+          await bot.sendMessage(chatId, localize(user.language, "no_profiles"));
         }
       }, delay);
       return; // Прерываем дальнейшую обработку, так как реклама уже показана
@@ -73,7 +87,7 @@ async function handleMessage(msg, bot) {
       await User.findByIdAndUpdate(currentMatch._id, { complained: true });
       await bot.sendMessage(
         chatId,
-        "Благодарим. Администрация ознакомится с вашей жалобой."
+        localize(user.language, "complaint_to_admin")
       );
 
       // Отмечаем текущий просматриваемый профиль как дизлайкнутый
@@ -86,57 +100,15 @@ async function handleMessage(msg, bot) {
       if (currentMatches.length > 0) {
         await showProfileForMatching(chatId, user, currentMatches[0], bot);
       } else {
-        await bot.sendMessage(
-          chatId,
-          "Больше анкет нет. Попробуйте зайти позже."
-        );
+        await bot.sendMessage(chatId, localize(user.language, "no_profiles"));
       }
     } else {
       await bot.sendMessage(
         chatId,
-        "Это можно делать только когда вы просматриваете анкеты."
+        localize(user.language, "complaint_failed")
       );
     }
   }
-
-  // if (user.currentMessageRecipient || user.currentChatPartner) {
-  //   // Объединяем логику для отправки сообщения
-  //   let recipient;
-  //   if (user.currentMessageRecipient) {
-  //     recipient = await User.findById(user.currentMessageRecipient);
-  //     if (recipient) {
-  //       await sendMessageToUser(user, recipient, msg.text, bot);
-  //       // Очищаем currentMessageRecipient после отправки только если это первое сообщение
-  //       await User.findByIdAndUpdate(user._id, {
-  //         $unset: { currentMessageRecipient: 1 },
-  //         currentChatPartner: recipient._id,
-  //       });
-  //       // Не отправляем сообщение о подтверждении здесь, так как это делается в sendMessageToUser
-  //     } else {
-  //       await bot.sendMessage(
-  //         chatId,
-  //         "Пользователь, которому вы пытались отправить сообщение, не найден."
-  //       );
-  //       await User.findByIdAndUpdate(user._id, {
-  //         $unset: { currentMessageRecipient: 1 },
-  //       });
-  //     }
-  //   } else if (user.currentChatPartner) {
-  //     recipient = await User.findById(user.currentChatPartner);
-  //     if (recipient) {
-  //       // Отправляем сообщение только один раз
-  //       await sendMessageToUser(user, recipient, msg.text, bot); // Используем sendMessageToUser для единой точки отправки
-  //     } else {
-  //       await bot.sendMessage(
-  //         chatId,
-  //         "Ваш собеседник не найден. Переписка прервана."
-  //       );
-  //       await User.findByIdAndUpdate(user._id, {
-  //         $unset: { currentChatPartner: 1 },
-  //       });
-  //     }
-  //   }
-  // }
 
   if (
     msg.text &&
@@ -199,13 +171,13 @@ async function handleMessage(msg, bot) {
           inline_keyboard: [
             [
               {
-                text: localize(user.language, "yes"),
+                text: localize(user.language, "go_to_profiles"),
                 callback_data: "profile_approved",
               },
             ],
             [
               {
-                text: localize(user.language, "no"),
+                text: localize(user.language, "return_to_edit"),
                 callback_data: "profile_edit",
               },
             ],
@@ -216,7 +188,7 @@ async function handleMessage(msg, bot) {
       console.error("Failed to send photo:", error);
       await bot.sendMessage(
         chatId,
-        "Не удалось отправить фотографию. Вот информация о профиле:",
+        localize(user.language, "error_sending_photo"),
         { parse_mode: "Markdown" }
       );
       await bot.sendMessage(chatId, profileText, { parse_mode: "Markdown" });
@@ -241,11 +213,21 @@ async function handleMessage(msg, bot) {
     // Обработка дизлайка
     await handleDislike(chatId, user, bot);
   } else if (msg.text === "⛔") {
-    await bot.sendMessage(chatId, "Выберите действие:", {
+    await bot.sendMessage(chatId, localize(user.language, "selects_one"), {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "Вернуться к анкете", callback_data: "return_to_profile" }],
-          [{ text: "Удалить профиль", callback_data: "delete_profile" }],
+          [
+            {
+              text: localize(user.language, "go_to_profile"),
+              callback_data: "return_to_profile",
+            },
+          ],
+          [
+            {
+              text: localize(user.language, "delete_profile"),
+              callback_data: "delete_profile",
+            },
+          ],
         ],
       },
     });
@@ -261,16 +243,13 @@ async function handleMessage(msg, bot) {
     if (!user.premium) {
       await bot.sendMessage(
         chatId,
-        "Извините, вы можете написать без совпадения по лайкам только с премиум подпиской. Для возвращения на анкету нажмите /myprofile"
+        localize(user.language, "error_not_premium")
       );
     } else {
       if (!user.lastMessageDate || user.lastMessageDate < startOfDay) {
         await handlePremiumSendMessage(user, chatId, bot);
       } else {
-        await bot.sendMessage(
-          chatId,
-          "Извините. Вы исчерпали свой лимит на сегодня."
-        );
+        await bot.sendMessage(chatId, localize(user.language, "limit_off"));
       }
     }
   } else if (msg.text && user.matches.length > 0) {
@@ -289,33 +268,41 @@ async function handlePremiumSendMessage(user, chatId, bot) {
       const confirmKeyboard = {
         reply_markup: {
           inline_keyboard: [
-            [{ text: "ДА", callback_data: "send_message_yes" }],
-            [{ text: "НЕТ", callback_data: "send_message_no" }],
+            [
+              {
+                text: localize(user.language, "yes"),
+                callback_data: "send_message_yes",
+              },
+            ],
+            [
+              {
+                text: localize(user.language, "no"),
+                callback_data: "send_message_no",
+              },
+            ],
           ],
         },
       };
       await bot.sendMessage(
         chatId,
-        "Вы можете отправить сообщение без совпадения по лайкам только один раз в сутки. Вы согласны?",
+        localize(user.language, "premium_message"),
         confirmKeyboard
       );
     } else {
       await bot.sendMessage(
         chatId,
-        "Не удалось найти пользователя для отправки сообщения."
+        localize(user.language, "conversation_not_started")
       );
     }
   } else {
     await bot.sendMessage(
       chatId,
-      "Извините, услуга доступна только раз в сутки."
+      localize(user.language, "feature_used_today")
     );
   }
 }
 
 async function findCurrentMatch(user) {
-  // Логика для нахождения текущего матча, например, последний просмотренный профиль
-  // Это может быть последний элемент массива matches или специальное поле для текущего матча
   return await User.findOne({
     _id: { $in: user.matches },
     _id: { $ne: user._id },
@@ -343,7 +330,7 @@ async function handleLike(chatId, user, bot) {
     if (!user.additionalLikesUsed) {
       const firstMessage = await bot.sendMessage(
         chatId,
-        "Вы достигли лимита лайков. Перейдите на страницу Илона Маска для получения дополнительных лайков:",
+        localize(user.language, "like_limit_reached"),
         {
           reply_markup: {
             inline_keyboard: [
@@ -362,7 +349,7 @@ async function handleLike(chatId, user, bot) {
       setTimeout(async () => {
         try {
           await bot.editMessageText(
-            "Подтвердите переход, чтобы активировать дополнительные лайки:",
+            localize(user.language, "extra_likes_confirm"),
             {
               chat_id: chatId,
               message_id: firstMessage.message_id,
@@ -370,7 +357,7 @@ async function handleLike(chatId, user, bot) {
                 inline_keyboard: [
                   [
                     {
-                      text: "Активировать дополнительные лайки",
+                      text: localize(user.language, "extra_likes_button"),
                       callback_data: "activate_additional_likes",
                     },
                   ],
@@ -383,13 +370,13 @@ async function handleLike(chatId, user, bot) {
           // Если редактирование не удалось (например, сообщение было удалено), отправляем новое сообщение
           await bot.sendMessage(
             chatId,
-            "Подтвердите переход, чтобы активировать дополнительные лайки:",
+            localize(user.language, "extra_likes_confirm"),
             {
               reply_markup: {
                 inline_keyboard: [
                   [
                     {
-                      text: "Активировать дополнительные лайки",
+                      text: localize(user.language, "extra_likes_button"),
                       callback_data: "activate_additional_likes",
                     },
                   ],
@@ -401,10 +388,7 @@ async function handleLike(chatId, user, bot) {
       }, 10000);
       return;
     } else {
-      await bot.sendMessage(
-        chatId,
-        "Вы достигли лимита лайков. Для увеличения лимита возьмите премиум."
-      );
+      await bot.sendMessage(chatId, localize(user.language, "premium_likes"));
       return;
     }
   }
@@ -422,7 +406,7 @@ async function handleLike(chatId, user, bot) {
     }
     await bot.sendMessage(
       chatId,
-      `Пользователь лайкнут. Осталось лайков: ${
+      `${localize(user.language, "user_liked")} ${
         user.premium
           ? 25 - user.dailyLikesGiven - 1
           : currentLimit - user.dailyLikesGiven - 1
@@ -441,10 +425,7 @@ async function handleLike(chatId, user, bot) {
     if (matches.length > 0) {
       await showProfileForMatching(chatId, user, matches[0], bot);
     } else {
-      await bot.sendMessage(
-        chatId,
-        "Больше анкет нет. Попробуйте зайти позже."
-      );
+      await bot.sendMessage(chatId, localize(user.language, "no_profiles"));
     }
   }
 }
@@ -461,10 +442,7 @@ async function handleDislike(chatId, user, bot) {
     if (matches.length > 0) {
       await showProfileForMatching(chatId, user, matches[0], bot);
     } else {
-      await bot.sendMessage(
-        chatId,
-        "Больше анкет нет. Попробуйте зайти позже."
-      );
+      await bot.sendMessage(chatId, localize(user.language, "no_profiles"));
     }
   }
 }
@@ -476,14 +454,14 @@ async function sendMatchNotification(user, match, bot) {
         inline_keyboard: [
           [
             {
-              text: "Начать чат",
+              text: localize(user.language, "start_conversation"),
               url: `tg://user?id=${match.telegramId}`,
             },
           ],
         ],
       },
     };
-    const message = `Новый матч с ${match.name}! Нажмите для начала чата:`;
+    const message = `${localize(user.language, "new_match")} ${match.name}`;
     await bot.sendPhoto(user.telegramId, match.photoUrl || "no_photo.png", {
       caption: message,
       ...chatButton,
@@ -492,7 +470,7 @@ async function sendMatchNotification(user, match, bot) {
     console.error("Error sending match notification:", error);
     await bot.sendMessage(
       user.telegramId,
-      `Ошибка при отправке уведомления о матче с ${match.name}.`
+      `${localize(user.language, "error")} ${match.name}.`
     );
   }
 }
