@@ -62,7 +62,7 @@ async function showProfileForMatching(chatId, user, match, bot) {
 }
 
 async function findMatches(user) {
-  const maxDistance = 100 * 1000;
+  const maxDistance = 300 * 1000;
   const query = {
     location: {
       $near: {
