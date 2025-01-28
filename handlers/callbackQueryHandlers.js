@@ -7,6 +7,25 @@ async function handleCallbackQuery(query, bot) {
   const chatId = query.message.chat.id;
   let user = await User.findOne({ telegramId: chatId });
 
+  if (
+    !user &&
+    !["start_profile_creation", "pl", "ru", "ua", "en"].includes(query.data)
+  ) {
+    await bot.sendMessage(chatId, localize("pl", "profile_not_found"), {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: localize("pl", "create_profile"),
+              callback_data: "start_profile_creation",
+            },
+          ],
+        ],
+      },
+    });
+    return;
+  }
+
   switch (query.data) {
     case query.data === "stop_conversation":
     case query.data.startsWith("stop_conversation_"):
@@ -170,41 +189,8 @@ async function handleProfileEdit(user, chatId, bot) {
   user.location = { type: "Point", coordinates: [0, 0] };
   user.name = undefined;
   user.about = undefined;
-  user.photoUrl = undefined;
+  user.photoUrl = no_photo.jpg;
   await user.save();
-}
-
-async function handleStartChat(user, matchId, bot) {
-  const match = await User.findById(matchId);
-
-  if (
-    !user.endedChats.includes(matchId) &&
-    match &&
-    user.availableChatPartners.includes(matchId)
-  ) {
-    await User.findByIdAndUpdate(user._id, {
-      $pull: { availableChatPartners: matchId },
-      currentChatPartner: match._id,
-    });
-    await User.findByIdAndUpdate(match._id, {
-      $pull: { availableChatPartners: user._id },
-      currentChatPartner: user._id,
-    });
-
-    await bot.sendMessage(
-      user.telegramId,
-      `Вы начали переписку с ${match.name}.`
-    );
-    await bot.sendMessage(
-      match.telegramId,
-      `Вы начали переписку с ${user.name}.`
-    );
-  } else {
-    await bot.sendMessage(
-      user.telegramId,
-      "Нельзя начать переписку с этим пользователем. Возможно, переписка была ранее прервана или матч недоступен."
-    );
-  }
 }
 
 async function handleDefaultCallback(user, chatId, query, bot) {
@@ -309,98 +295,6 @@ async function handleDefaultCallback(user, chatId, query, bot) {
     });
   }
 }
-
-async function handleStopChat(chatId, user, bot) {
-  if (user.currentChatPartner) {
-    const chatPartner = await User.findById(user.currentChatPartner);
-    if (chatPartner) {
-      await bot.sendMessage(user.telegramId, "Вы прервали переписку.");
-      await bot.sendMessage(
-        chatPartner.telegramId,
-        "Ваша переписка была прервана."
-      );
-
-      await User.updateMany(
-        { _id: { $in: [user._id, chatPartner._id] } },
-        {
-          $unset: { currentChatPartner: 1 },
-          $addToSet: { endedChats: { $each: [user._id, chatPartner._id] } },
-          $pull: {
-            matches: { $each: [user._id, chatPartner._id] },
-            availableChatPartners: { $each: [user._id, chatPartner._id] },
-          },
-        }
-      );
-    } else {
-      await bot.sendMessage(
-        chatId,
-        "Ошибка: Партнер по чату не найден. Переписка уже прервана."
-      );
-      await User.findByIdAndUpdate(user._id, {
-        $unset: { currentChatPartner: 1 },
-      });
-    }
-  } else {
-    await bot.sendMessage(
-      chatId,
-      "У вас нет текущей переписки для прерывания."
-    );
-  }
-}
-
-async function handleStopConversation(user, otherUserId, chatId, bot) {
-  if (otherUserId) {
-    const otherUser = await User.findById(otherUserId);
-    if (otherUser) {
-      await User.updateMany(
-        { _id: { $in: [user._id, otherUserId] } },
-        {
-          $unset: { currentChatPartner: 1 },
-          $addToSet: { endedChats: { $each: [user._id, otherUserId] } },
-        }
-      );
-      await bot.sendMessage(user.telegramId, "Вы завершили беседу.");
-      await bot.sendMessage(
-        otherUser.telegramId,
-        "Беседа с вами была завершена."
-      );
-    } else {
-      await bot.sendMessage(
-        chatId,
-        "Пользователь, с которым вы пытались общаться, не найден."
-      );
-    }
-  } else {
-    if (user.currentChatPartner) {
-      const chatPartner = await User.findById(user.currentChatPartner);
-      if (chatPartner) {
-        await User.updateMany(
-          { _id: { $in: [user._id, chatPartner._id] } },
-          {
-            $unset: { currentChatPartner: 1 },
-            $addToSet: { endedChats: { $each: [user._id, chatPartner._id] } },
-          }
-        );
-        await bot.sendMessage(user.telegramId, "Вы завершили беседу.");
-        await bot.sendMessage(
-          chatPartner.telegramId,
-          "Беседа с вами была завершена."
-        );
-      } else {
-        await bot.sendMessage(
-          chatId,
-          "Пользователь, с которым вы пытались общаться, не найден."
-        );
-        await User.findByIdAndUpdate(user._id, {
-          $unset: { currentChatPartner: 1 },
-        });
-      }
-    } else {
-      await bot.sendMessage(chatId, "У вас нет текущей беседы для завершения.");
-    }
-  }
-}
-
 async function handleSendMessageConfirmation(user, chatId, bot) {
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -408,20 +302,31 @@ async function handleSendMessageConfirmation(user, chatId, bot) {
     await User.findByIdAndUpdate(user._id, { lastMessageDate: now });
     const match = await findCurrentMatch(user);
     if (match) {
-      // Устанавливаем обоих как партнеров по чату
-      await User.findByIdAndUpdate(user._id, {
-        currentMessageRecipient: match._id,
-        currentChatPartner: match._id,
-      });
-      await User.findByIdAndUpdate(match._id, {
-        currentChatPartner: user._id,
-      });
-      await bot.sendMessage(chatId, "Введите ваше сообщение:");
-      // Уведомляем получателя о новом сообщении
-      await bot.sendMessage(
-        match.telegramId,
-        `У вас новое сообщение от ${user.name}.`
-      );
+      const chatButton = {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "Начать чат",
+                url: `tg://user?id=${match.telegramId}`,
+              },
+            ],
+          ],
+        },
+      };
+      try {
+        await bot.sendMessage(
+          chatId,
+          `Вы можете начать чат с ${match.name}:`,
+          chatButton
+        );
+      } catch (error) {
+        console.error("Error sending message with chat button:", error);
+        await bot.sendMessage(
+          chatId,
+          "Ошибка при создании кнопки для начала чата. Пользователь может быть недоступен или ID некорректен."
+        );
+      }
     } else {
       await bot.sendMessage(
         chatId,

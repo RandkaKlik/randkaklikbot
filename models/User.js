@@ -39,10 +39,10 @@ const UserSchema = new Schema({
   lastMessageDate: { type: Date },
   dailyLikesGiven: { type: Number, default: 0 },
   additionalLikesUsed: { type: Boolean, default: false },
-  currentMessageRecipient: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-  },
+  // currentMessageRecipient: {
+  //   type: mongoose.Schema.Types.ObjectId,
+  //   ref: "User",
+  // },
   currentChatPartner: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   matches: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   availableChatPartners: [

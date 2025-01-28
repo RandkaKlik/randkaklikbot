@@ -5,7 +5,6 @@ const connectDB = require("./config/db");
 const commandHandlers = require("./handlers/commandHandlers");
 const messageHandlers = require("./handlers/messageHandlers");
 const callbackQueryHandlers = require("./handlers/callbackQueryHandlers");
-const { addLike, resetDailyLikes } = require("./services/userService");
 
 connectDB()
   .then(() => {
