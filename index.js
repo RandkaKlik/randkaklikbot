@@ -1,4 +1,5 @@
 require("dotenv").config();
+const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const app = express();
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
@@ -6,7 +7,6 @@ const connectDB = require("./config/db");
 const commandHandlers = require("./handlers/commandHandlers");
 const messageHandlers = require("./handlers/messageHandlers");
 const callbackQueryHandlers = require("./handlers/callbackQueryHandlers");
-const express = require("express");
 
 connectDB()
   .then(() => {
@@ -27,9 +27,9 @@ connectDB()
   })
   .catch((err) => console.error("Failed to connect to database:", err));
 
-const webhookUrl = "https://polish-bot-25.onrender.com/webhook";
+const webhookUrl = "https://randkaklik.onrender.com/webhook";
 
-bot.telegram.setWebhook(webhookUrl);
+bot.setWebHook(webhookUrl);
 
 app.use(bot.webhookCallback("/webhook"));
 
