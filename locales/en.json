@@ -69,5 +69,6 @@
   "hide_profile_from_others": "Hide profile from other participants",
   "show_profile_to_others": "Show profile to other participants",
   "profile_hidden": "Your profile is hidden from other users. To make it visible, click 'View Profiles', then select ⛔.",
-  "profile_shown": "Your profile is now visible to other users."
+  "profile_shown": "Your profile is now visible to other users.",
+  "profile_hide_show": "Hide/show profile"
 }

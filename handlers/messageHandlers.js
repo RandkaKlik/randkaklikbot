@@ -229,7 +229,7 @@ async function handleMessage(msg, bot) {
           ],
           [
             {
-              text: hideShowProfileText,
+              text: localize(user.language, "profile_hide_show"),
               callback_data: user.hidden ? "show_profile" : "hide_profile",
             },
           ],
