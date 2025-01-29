@@ -337,7 +337,7 @@ async function handleLike(chatId, user, bot) {
   } else if (!user.premium && user.dailyLikesGiven >= currentLimit) {
     if (!user.additionalLikesUsed) {
       const urls = [
-        { platform: "Instagram", url: "hhttps://www.instagram.com/randkaklik" },
+        { platform: "Instagram", url: "https://www.instagram.com/randkaklik" },
         { platform: "X", url: "https://x.com/randkaklik" },
         { platform: "Telegram", url: "https://t.me/randkaklikanal" },
       ];
