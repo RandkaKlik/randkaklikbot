@@ -1,8 +1,8 @@
 require("dotenv").config();
 const express = require("express");
-const TelegramBot = require("node-telegram-bot-api");
+const { Telegraf } = require("telegraf"); // Импортируем Telegraf
 const app = express();
-const bot = new TelegramBot(process.env.BOT_TOKEN);
+const bot = new Telegraf(process.env.BOT_TOKEN); // Создаем экземпляр бота
 const connectDB = require("./config/db");
 const commandHandlers = require("./handlers/commandHandlers");
 const messageHandlers = require("./handlers/messageHandlers");
@@ -12,24 +12,26 @@ connectDB()
   .then(() => {
     console.log("Database connection established");
 
-    bot.onText(/\/start/, (msg) => commandHandlers.handleStart(msg, bot));
-    bot.onText(/\/myprofile/, (msg) =>
-      commandHandlers.handleMyProfile(msg, bot)
+    // Передаем bot в обработчики команд
+    bot.command("start", (ctx) => commandHandlers.handleStart(ctx, bot));
+    bot.command("myprofile", (ctx) =>
+      commandHandlers.handleMyProfile(ctx, bot)
     );
 
-    bot.on("callback_query", async (query) => {
-      await callbackQueryHandlers.handleCallbackQuery(query, bot);
+    bot.on("callback_query", async (ctx) => {
+      await callbackQueryHandlers.handleCallbackQuery(ctx, bot);
     });
 
-    bot.on("message", (msg) => messageHandlers.handleMessage(msg, bot));
+    bot.on("message", (ctx) => messageHandlers.handleMessage(ctx, bot));
 
-    const webhookUrl = "https://randkaklikbot.onrender.com/webhook";
-    bot.setWebHook(webhookUrl);
-
-    // Обрабатываем запросы на webhook
-    app.use(bot.webhookCallback("/webhook"));
+    // Настройка webhook
+    const webhookUrl = "https://yourdomain.com/webhook"; // Укажите свой URL
+    bot.telegram.setWebhook(webhookUrl); // Устанавливаем webhook
   })
   .catch((err) => console.error("Failed to connect to database:", err));
+
+// Создаем маршрут для обработки webhook
+app.use(bot.webhookCallback("/webhook")); // Подключаем webhook callback
 
 app.get("/", (req, res) => {
   console.log("Mmm... I’m Mr. Frundles");
