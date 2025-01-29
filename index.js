@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const app = express();
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true }); // Убираем webhook
+const bot = new TelegramBot(process.env.BOT_TOKEN);
 const connectDB = require("./config/db");
 const commandHandlers = require("./handlers/commandHandlers");
 const messageHandlers = require("./handlers/messageHandlers");
@@ -12,7 +12,6 @@ connectDB()
   .then(() => {
     console.log("Database connection established");
 
-    // Передаем bot в обработчики команд
     bot.onText(/\/start/, (msg) => commandHandlers.handleStart(msg, bot));
     bot.onText(/\/myprofile/, (msg) =>
       commandHandlers.handleMyProfile(msg, bot)
@@ -22,8 +21,13 @@ connectDB()
       await callbackQueryHandlers.handleCallbackQuery(query, bot);
     });
 
-    // Передаем bot в обработчик сообщений
     bot.on("message", (msg) => messageHandlers.handleMessage(msg, bot));
+
+    const webhookUrl = "https://randkaklikbot.onrender.com/webhook";
+    bot.setWebHook(webhookUrl);
+
+    // Обрабатываем запросы на webhook
+    app.use(bot.webhookCallback("/webhook"));
   })
   .catch((err) => console.error("Failed to connect to database:", err));
 
