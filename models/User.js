@@ -23,6 +23,7 @@ const UserSchema = new Schema({
     type: { type: String, default: "Point" },
     coordinates: [Number],
   },
+  hidden: { type: Boolean, default: false },
   name: { type: String },
   about: { type: String },
   photoUrl: { type: String },

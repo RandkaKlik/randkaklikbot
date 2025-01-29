@@ -14,7 +14,9 @@ async function handleStart(msg, bot) {
       user.language,
       "about"
     )}: ${user.about || localize(user.language, "not_provided")}`;
-
+    if (user.hidden) {
+      profileText += `\n🔒 ${localize(user.language, "profile_hidden")}`;
+    }
     try {
       if (user.photoUrl) {
         await sendProfileWithPhoto(
@@ -80,7 +82,9 @@ async function handleMyProfile(msg, bot) {
       user.language,
       "about"
     )}: ${user.about || localize(user.language, "not_provided")}`;
-
+    if (user.hidden) {
+      profileText += `\n🔒 ${localize(user.language, "profile_hidden")}`;
+    }
     try {
       if (user.photoUrl) {
         await sendProfileWithPhoto(

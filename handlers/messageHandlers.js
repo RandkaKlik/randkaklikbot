@@ -165,6 +165,9 @@ async function handleMessage(msg, bot) {
     )}: ${user.city}\n${localize(user.language, "about")}: ${
       user.about || localize(user.language, "not_provided")
     }`;
+    if (user.hidden) {
+      profileText += `\n🔒 ${localize(user.language, "profile_hidden")}`;
+    }
     try {
       await bot.sendPhoto(chatId, user.photoUrl, {
         caption: profileText,
@@ -222,6 +225,12 @@ async function handleMessage(msg, bot) {
             {
               text: localize(user.language, "go_to_profile"),
               callback_data: "return_to_profile",
+            },
+          ],
+          [
+            {
+              text: hideShowProfileText,
+              callback_data: user.hidden ? "show_profile" : "hide_profile",
             },
           ],
           [

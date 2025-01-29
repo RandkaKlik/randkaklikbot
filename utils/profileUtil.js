@@ -79,6 +79,7 @@ async function findMatches(user) {
       $ne: user._id,
       $nin: [...user.likesGiven, ...user.dislikesGiven],
     },
+    hidden: false,
   };
 
   const matches = await User.find(query)

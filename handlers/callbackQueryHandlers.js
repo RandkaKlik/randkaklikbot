@@ -27,6 +27,15 @@ async function handleCallbackQuery(query, bot) {
   }
 
   switch (query.data) {
+    case "hide_profile":
+    case "show_profile":
+      if (user) {
+        user.hidden = query.data === "hide_profile";
+        await user.save();
+        // Возвращаем пользователя к просмотру профиля после изменения статуса
+        await commandHandlers.handleMyProfile({ chat: { id: chatId } }, bot);
+      }
+      break;
     case query.data === "stop_conversation":
     case query.data.startsWith("stop_conversation_"):
       await handleStopConversation(
