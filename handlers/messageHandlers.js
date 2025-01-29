@@ -337,9 +337,9 @@ async function handleLike(chatId, user, bot) {
   } else if (!user.premium && user.dailyLikesGiven >= currentLimit) {
     if (!user.additionalLikesUsed) {
       const urls = [
-        { platform: "Instagram", url: "https://www.instagram.com/elonmusk/" },
-        { platform: "X", url: "https://x.com/elonmusk" },
-        { platform: "Telegram", url: "https://t.me/elonmusk" },
+        { platform: "Instagram", url: "hhttps://www.instagram.com/randkaklik" },
+        { platform: "X", url: "https://x.com/randkaklik" },
+        { platform: "Telegram", url: "https://t.me/randkaklikanal" },
       ];
 
       const randomUrl = urls[Math.floor(Math.random() * urls.length)];
