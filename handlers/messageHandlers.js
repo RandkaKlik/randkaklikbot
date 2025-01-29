@@ -22,7 +22,7 @@ async function handleMessage(msg, bot) {
   if (msg.text === "/premium") {
     await bot.sendMessage(
       chatId,
-      `${localize(user.language, "contact_admin_for_premium")} @datingadminacc`
+      `${localize(user.language, "contact_admin_for_premium")} @signorN`
     );
   }
 
